@@ -293,61 +293,59 @@ function pnl(){
     //--------
     
     function getUserData(){
-        // let walletData = {
-        //   "global": {
-        //       "bank": 2500,
-        //       "pnl": "+150"
-        //   },
-        //   "coins": [
-        //       {
-        //           "asset": "BTC",
-        //           "amount": "0.0025",
-        //           "price": "60000",
-        //           "actual_value": "150",
-        //           "buy_value": "140",
-        //           "mean_buy": "56000",
-        //           "ongoing_pnl": "10"
-        //       },
-        //       {
-        //           "asset": "ETH",
-        //           "amount": "0.05",
-        //           "price": "4000",
-        //           "actual_value": "200",
-        //           "buy_value": "190",
-        //           "mean_buy": "3800",
-        //           "ongoing_pnl": "10"
-        //       },
-        //       {
-        //           "asset": "ADA",
-        //           "amount": "1500",
-        //           "price": "1.20",
-        //           "actual_value": "1800",
-        //           "buy_value": "2000",
-        //           "mean_buy": "1.33",
-        //           "ongoing_pnl": "-200"
-        //       },
-        //       {
-        //           "asset": "DOT",
-        //           "amount": "30",
-        //           "price": "35",
-        //           "actual_value": "1050",
-        //           "buy_value": "900",
-        //           "mean_buy": "30",
-        //           "ongoing_pnl": "150"
-        //       },
-        //       {
-        //           "asset": "SOL",
-        //           "amount": "5",
-        //           "price": "150",
-        //           "actual_value": "750",
-        //           "buy_value": "800",
-        //           "mean_buy": "160",
-        //           "ongoing_pnl": "-50"
-        //       }
-        //   ]
-        // }
-
-        let walletData = fetchBinanceData();
+        let walletData = {
+          "global": {
+              "bank": 2500,
+              "pnl": "+150"
+          },
+          "coins": [
+              {
+                  "asset": "BTC",
+                  "amount": "0.0025",
+                  "price": "60000",
+                  "actual_value": "150",
+                  "buy_value": "140",
+                  "mean_buy": "56000",
+                  "ongoing_pnl": "10"
+              },
+              {
+                  "asset": "ETH",
+                  "amount": "0.05",
+                  "price": "4000",
+                  "actual_value": "200",
+                  "buy_value": "190",
+                  "mean_buy": "3800",
+                  "ongoing_pnl": "10"
+              },
+              {
+                  "asset": "ADA",
+                  "amount": "1500",
+                  "price": "1.20",
+                  "actual_value": "1800",
+                  "buy_value": "2000",
+                  "mean_buy": "1.33",
+                  "ongoing_pnl": "-200"
+              },
+              {
+                  "asset": "DOT",
+                  "amount": "30",
+                  "price": "35",
+                  "actual_value": "1050",
+                  "buy_value": "900",
+                  "mean_buy": "30",
+                  "ongoing_pnl": "150"
+              },
+              {
+                  "asset": "SOL",
+                  "amount": "5",
+                  "price": "150",
+                  "actual_value": "750",
+                  "buy_value": "800",
+                  "mean_buy": "160",
+                  "ongoing_pnl": "-50"
+              }
+          ]
+        }
 
         displayNewData(walletData);
         return walletData;
