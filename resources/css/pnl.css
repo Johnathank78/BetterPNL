@@ -7,6 +7,7 @@
     --light-yellow: hsl(46, 91%, 60%);
     --red: rgb(246, 70, 93);
     --green: rgb(46, 189, 133);
+    --gray: rgb(139, 139, 139);
 }
 
 @font-face {
@@ -284,10 +285,12 @@ body{
     padding: 6px;
     height: 30px;
     
+    color: white;
+    
     font-weight: 500;
     font-size: 16px;
 
-    border-radius: 8px 8px 0 0;
+    border-radius: 8px;
     border: none;
     cursor: pointer;
 }
