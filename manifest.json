@@ -1,0 +1,36 @@
+{
+  "name": "HighEnough",
+  "short_name": "HighEnough",
+  "description": "WebApp Game",
+  "start_url": "/HighEnough/index.html",
+  "display_override": ["fullscreen", "minimal-ui"],
+  "display": "standalone",
+  "background_color": "#181a20",
+  "theme_color": "#181a20",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/HighEnough/resources/imgs/icon.png",
+      "type": "image/png",
+      "sizes": "500x500",
+      "purpose": "any"
+    }
+  ],
+  "screenshots" : [
+    {
+      "src": "/HighEnough/resources/imgs/smallSS.png",
+      "sizes": "430x870",
+      "type": "image/png",
+      "label": "Homescreen of JohnWorkout",
+      "purpose": "any"
+    },
+    {
+      "src": "/HighEnough/resources/imgs/wideSS.png",
+      "sizes": "1905x962",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Homescreen of JohnWorkout",
+      "purpose": "any"
+    }
+  ]
+}
