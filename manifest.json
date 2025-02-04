@@ -1,8 +1,8 @@
 {
-  "name": "HighEnough",
-  "short_name": "HighEnough",
-  "description": "WebApp Game",
-  "start_url": "/HighEnough/index.html",
+  "name": "BetterPNL",
+  "short_name": "BetterPNL",
+  "description": "WebApp Binance helper",
+  "start_url": "/BetterPNL/index.html",
   "display_override": ["fullscreen", "minimal-ui"],
   "display": "standalone",
   "background_color": "#181a20",
@@ -10,7 +10,7 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/HighEnough/resources/imgs/icon.png",
+      "src": "/BetterPNL/resources/imgs/icon.png",
       "type": "image/png",
       "sizes": "500x500",
       "purpose": "any"
@@ -18,14 +18,14 @@
   ],
   "screenshots" : [
     {
-      "src": "/HighEnough/resources/imgs/smallSS.png",
+      "src": "/BetterPNL/resources/imgs/smallSS.png",
       "sizes": "430x870",
       "type": "image/png",
       "label": "Homescreen of JohnWorkout",
       "purpose": "any"
     },
     {
-      "src": "/HighEnough/resources/imgs/wideSS.png",
+      "src": "/BetterPNL/resources/imgs/wideSS.png",
       "sizes": "1905x962",
       "type": "image/png",
       "form_factor": "wide",
