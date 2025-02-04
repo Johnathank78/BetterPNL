@@ -5,6 +5,8 @@ function pnl(){
     const isMobile = /Mobi/.test(navigator.userAgent);
     const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+    var backerX = 0;
+
     var current_page = "app";
     $('img').attr('draggable', false);
 
@@ -36,219 +38,316 @@ function pnl(){
     
     // UTILITY
 
-    // Binance API base URL and a CORS proxy (for testing only)
-    const BASE_URL = "https://api.binance.com";
-    const CORS_PROXY = "https://cors-anywhere.herokuapp.com/";
+    const BINANCE_BASE_URL = "https://api.binance.com";
 
-    // --- Utility Functions ---
-    function buildQueryString(params) {
-      return Object.keys(params)
-        .map(key => key + '=' + encodeURIComponent(params[key]))
-        .join('&');
-    }
-
+    // ---------------------------------------------------------------------
+    // 2) Utility: SubtleCrypto-based HMAC-SHA256 signing
+    // ---------------------------------------------------------------------
     async function signRequest(queryString, secret) {
       const encoder = new TextEncoder();
-      const keyData = encoder.encode(secret);
-      const cryptoKey = await crypto.subtle.importKey(
+      const secretKeyData = encoder.encode(secret);
+      const messageData = encoder.encode(queryString);
+
+      const key = await crypto.subtle.importKey(
         "raw",
-        keyData,
-        { name: "HMAC", hash: "SHA-256" },
+        secretKeyData,
+        { name: "HMAC", hash: { name: "SHA-256" } },
         false,
         ["sign"]
       );
-      const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(queryString));
-      const signatureArray = Array.from(new Uint8Array(signatureBuffer));
-      return signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const signatureBuffer = await crypto.subtle.sign("HMAC", key, messageData);
+      const signatureBytes = new Uint8Array(signatureBuffer);
+      return Array.from(signatureBytes)
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
     }
 
-    // General function to call Binance API endpoints
-    async function fetchBinance(endpoint, params = {}, signed = false) {
-      if (signed) {
-        // Add a timestamp and sign the query
-        params.timestamp = Date.now();
-        const qs = buildQueryString(params);
-        const signature = await signRequest(qs, API['SECRET']);
-        params.signature = signature;
-      }
-      const query = buildQueryString(params);
-      const url = CORS_PROXY + BASE_URL + endpoint + (query ? '?' + query : '');
-      const headers = signed ? { "X-MBX-APIKEY": API['API'] } : {};
-      const response = await fetch(url, { headers });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    }
-
-    // --- Binance API Functions ---
+    // ---------------------------------------------------------------------
+    // 3) GET /api/v3/account to get balances
+    // ---------------------------------------------------------------------
     async function getAccountInfo() {
-      return await fetchBinance('/api/v3/account', {}, true);
-    }
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = await signRequest(queryString, API['SECRET']);
+      const finalQuery = `${queryString}&signature=${signature}`;
 
-    async function getMyTrades(symbol) {
-      return await fetchBinance('/api/v3/myTrades', { symbol: symbol }, true);
-    }
+      const url = `${BINANCE_BASE_URL}/api/v3/account?${finalQuery}`;
 
-    async function getTickerPrice(symbol) {
-      return await fetchBinance('/api/v3/ticker/price', { symbol: symbol }, false);
-    }
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': API['API']
+        }
+      });
 
-    async function calculerPrixAchatMoyen(asset) {
-      const symbol = asset + "USDC";
-      let trades;
-      try {
-        trades = await getMyTrades(symbol);
-      } catch (e) {
-        console.error(`Error fetching trades for ${symbol}:`, e);
-        return null;
+      if (!response.ok) {
+        throw new Error(`Error in getAccountInfo: ${response.statusText}`);
       }
-      // Sort trades chronologically
+      return response.json();
+    }
+
+    // ---------------------------------------------------------------------
+    // 4) GET /api/v3/myTrades?symbol=SYMBOL to get trade history
+    //    We'll replicate the Python logic to compute average purchase price:
+    //      - Sort trades by time
+    //      - For each buy, add (qty * price) to cost; add qty to position
+    //      - For each sell, remove position at average cost
+    // ---------------------------------------------------------------------
+    async function getTrades(symbol) {
+      const timestamp = Date.now();
+      const queryString = `symbol=${symbol}&timestamp=${timestamp}`;
+      const signature = await signRequest(queryString, API['SECRET']);
+      const finalQuery = `${queryString}&signature=${await signature}`;
+
+      const url = `${BINANCE_BASE_URL}/api/v3/myTrades?${finalQuery}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': API['API']
+        }
+      });
+
+      if (!response.ok) {
+        // If no trades or error, just return empty array
+        return [];
+      }
+      return response.json();
+    }
+
+    // ---------------------------------------------------------------------
+    // 5) GET /api/v3/ticker/price?symbol=SYMBOL for current price
+    // ---------------------------------------------------------------------
+    async function getSymbolTicker(symbol) {
+      const url = `${BINANCE_BASE_URL}/api/v3/ticker/price?symbol=${symbol}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Error fetching ticker for ${symbol}: ${response.statusText}`);
+      }
+      return response.json();
+    }
+
+    // ---------------------------------------------------------------------
+    // 6) Helper: compute average buy price from trade list
+    //    This matches your Python "calculer_prix_achat_moyen" function.
+    // ---------------------------------------------------------------------
+    function computeAveragePrice(trades) {
+      // Sort by time ascending
       trades.sort((a, b) => a.time - b.time);
+
       let positionQty = 0.0;
       let positionCost = 0.0;
-      for (const trade of trades) {
-        const qty = parseFloat(trade.qty);
-        const price = parseFloat(trade.price);
-        if (trade.isBuyer) {
+
+      for (const t of trades) {
+        const qty = parseFloat(t.qty);
+        const price = parseFloat(t.price);
+
+        if (t.isBuyer) {
+          // Buy
           positionQty += qty;
           positionCost += qty * price;
         } else {
+          // Sell
           if (positionQty <= 0) continue;
           const avgCost = positionCost / positionQty;
-          positionCost -= qty * avgCost;
-          positionQty -= qty;
+          const sellQty = qty;
+          positionCost -= sellQty * avgCost;
+          positionQty -= sellQty;
         }
       }
-      return positionQty > 0 ? positionCost / positionQty : null;
+
+      if (positionQty > 0) {
+        return positionCost / positionQty;
+      }
+      return null;
     }
 
-    // --- Build Wallet Data ---
-    async function getWalletData() {
-      let accountInfo;
-      try {
-        accountInfo = await getAccountInfo();
-      } catch (e) {
-        console.error("Error fetching account info:", e);
-        return;
-      }
+    // ---------------------------------------------------------------------
+    // 7) Main function to replicate your Python "afficher_actifs" logic:
+    //    - Get account balances
+    //    - For each asset > 0, get trades, average cost, ticker, etc.
+    //    - Build a final JSON structure
+    // ---------------------------------------------------------------------
+    async function fetchBinanceData() {
+      const result = {
+        global: {
+          bank: 0.0,
+          pnl: 0.0
+        },
+        coins: []
+      };
+
       let totalBalanceCurrent = 0.0;
       let totalPnl = 0.0;
-      const coins = [];
+
+      // 7.1 Get account info (balances)
+      const accountInfo = await getAccountInfo();
+
+      // 7.2 Iterate over each balance
       for (const balance of accountInfo.balances) {
         const asset = balance.asset;
         const free = parseFloat(balance.free);
         const locked = parseFloat(balance.locked);
         const total = free + locked;
-        if (total <= 0) continue;
-        // Special handling for USDC (treated as cash)
-        if (asset.toUpperCase() === "USDC") {
-          if (total < 1) continue;
-          const avgPrice = 1.0;
-          const currentPrice = 1.0;
-          const purchaseValue = total * avgPrice;
-          const currentValue = total * currentPrice;
-          const pnl = currentValue - purchaseValue;
-          totalBalanceCurrent += currentValue;
-          totalPnl += pnl;
-        } else {
-          const symbol = asset + "USDC";
-          const avgPrice = await calculerPrixAchatMoyen(asset);
-          let currentPrice;
-          try {
-            const ticker = await getTickerPrice(symbol);
-            currentPrice = parseFloat(ticker.price);
-          } catch (e) {
-            console.error(`Error fetching ticker for ${symbol}:`, e);
-            currentPrice = null;
-          }
-          const currentValue = currentPrice !== null ? total * currentPrice : 0;
-          let purchaseValue, pnl;
-          if (avgPrice !== null) {
-            purchaseValue = total * avgPrice;
-            pnl = currentValue - purchaseValue;
-          } else {
-            purchaseValue = currentPrice !== null ? total * currentPrice : 0;
-            pnl = 0;
-          }
-          const valueToCheck = currentPrice !== null ? currentValue : purchaseValue;
-          if (valueToCheck < 1) continue;
-          coins.push({
-            asset: asset,
-            amount: total.toString(),
-            price: currentPrice !== null ? currentPrice.toString() : "non disponible",
-            actual_value: currentValue.toString(),
-            buy_value: purchaseValue.toString(),
-            mean_buy: avgPrice !== null ? avgPrice.toString() : "non disponible",
-            ongoing_pnl: pnl.toString()
-          });
-          totalBalanceCurrent += currentValue;
-          totalPnl += pnl;
+
+        // Only consider assets with a meaningful quantity
+        if (total <= 0) {
+          continue;
         }
+
+        // If the asset is "USDC", treat it as stable
+        if (asset.toUpperCase() === 'USDC') {
+          // Skip if less than 1 USDC
+          if (total < 1) {
+            continue;
+          }
+          // For USDC itself, we do not need trades or ticker
+          // It's always "1.0", so PnL = 0 for stable
+          const currentValue = total;   // total USDC
+          totalBalanceCurrent += currentValue;
+
+          // Add to result
+          result.coins.push({
+            asset: 'USDC',
+            amount: total.toString(),
+            price: "1.00",
+            actual_value: currentValue.toString(),
+            buy_value: currentValue.toString(),
+            mean_buy: "1.00",
+            ongoing_pnl: "0"
+          });
+          continue;
+        }
+
+        // 7.3 For other assets, build symbol => e.g. BTCUSDC
+        const symbol = asset + "USDC";
+
+        // 7.4 Get trades for that symbol
+        let trades;
+        try {
+          trades = await getTrades(symbol);
+        } catch (e) {
+          // if there's an error or no trades
+          continue;
+        }
+
+        // 7.5 Compute average cost from trades
+        const avgPrice = computeAveragePrice(trades);
+
+        // 7.6 Get current ticker price
+        let currentPrice;
+        try {
+          const tickerData = await getSymbolTicker(symbol);
+          currentPrice = parseFloat(tickerData.price);
+        } catch (e) {
+          currentPrice = null;
+        }
+
+        let currentValue = 0.0;
+        if (currentPrice !== null) {
+          currentValue = total * currentPrice;
+        }
+
+        let purchaseValue = 0.0;
+        let pnl = 0.0;
+
+        if (avgPrice !== null) {
+          purchaseValue = total * avgPrice;
+          pnl = currentValue - purchaseValue;
+        } else {
+          // No historical trades => treat cost = current if price is known
+          purchaseValue = currentPrice ? (total * currentPrice) : 0;
+          pnl = 0;
+        }
+
+        // skip if < 1 USDC in value
+        const checkValue = currentPrice ? currentValue : purchaseValue;
+        if (checkValue < 1) {
+          continue;
+        }
+
+        totalBalanceCurrent += currentValue;
+        totalPnl += pnl;
+
+        // 7.7 Add details to "coins" array
+        result.coins.push({
+          asset: asset,
+          amount: total.toString(),
+          price: currentPrice ? currentPrice.toFixed(2) : "non disponible",
+          actual_value: currentValue.toFixed(2),
+          buy_value: purchaseValue.toFixed(2),
+          mean_buy: avgPrice ? avgPrice.toFixed(2) : "indispo",
+          ongoing_pnl: pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)
+        });
       }
-      const global = {
-        bank: totalBalanceCurrent.toFixed(2),
-        pnl: (totalPnl >= 0 ? "+" : "") + totalPnl.toFixed(2)
-      };
-      return { global, coins };
+
+      // 7.8 Populate global info
+      result.global.bank = totalBalanceCurrent.toFixed(2);
+      result.global.pnl = (totalPnl >= 0 ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2));
+
+      // Return the final JSON structure
+      return result;
     }
 
     //--------
     
     function getUserData(){
-        let walletData = {
-          "global": {
-              "bank": 2500,
-              "pnl": "+150"
-          },
-          "coins": [
-              {
-                  "asset": "BTC",
-                  "amount": "0.0025",
-                  "price": "60000",
-                  "actual_value": "150",
-                  "buy_value": "140",
-                  "mean_buy": "56000",
-                  "ongoing_pnl": "10"
-              },
-              {
-                  "asset": "ETH",
-                  "amount": "0.05",
-                  "price": "4000",
-                  "actual_value": "200",
-                  "buy_value": "190",
-                  "mean_buy": "3800",
-                  "ongoing_pnl": "10"
-              },
-              {
-                  "asset": "ADA",
-                  "amount": "1500",
-                  "price": "1.20",
-                  "actual_value": "1800",
-                  "buy_value": "2000",
-                  "mean_buy": "1.33",
-                  "ongoing_pnl": "-200"
-              },
-              {
-                  "asset": "DOT",
-                  "amount": "30",
-                  "price": "35",
-                  "actual_value": "1050",
-                  "buy_value": "900",
-                  "mean_buy": "30",
-                  "ongoing_pnl": "150"
-              },
-              {
-                  "asset": "SOL",
-                  "amount": "5",
-                  "price": "150",
-                  "actual_value": "750",
-                  "buy_value": "800",
-                  "mean_buy": "160",
-                  "ongoing_pnl": "-50"
-              }
-          ]
-        }
+        // let walletData = {
+        //   "global": {
+        //       "bank": 2500,
+        //       "pnl": "+150"
+        //   },
+        //   "coins": [
+        //       {
+        //           "asset": "BTC",
+        //           "amount": "0.0025",
+        //           "price": "60000",
+        //           "actual_value": "150",
+        //           "buy_value": "140",
+        //           "mean_buy": "56000",
+        //           "ongoing_pnl": "10"
+        //       },
+        //       {
+        //           "asset": "ETH",
+        //           "amount": "0.05",
+        //           "price": "4000",
+        //           "actual_value": "200",
+        //           "buy_value": "190",
+        //           "mean_buy": "3800",
+        //           "ongoing_pnl": "10"
+        //       },
+        //       {
+        //           "asset": "ADA",
+        //           "amount": "1500",
+        //           "price": "1.20",
+        //           "actual_value": "1800",
+        //           "buy_value": "2000",
+        //           "mean_buy": "1.33",
+        //           "ongoing_pnl": "-200"
+        //       },
+        //       {
+        //           "asset": "DOT",
+        //           "amount": "30",
+        //           "price": "35",
+        //           "actual_value": "1050",
+        //           "buy_value": "900",
+        //           "mean_buy": "30",
+        //           "ongoing_pnl": "150"
+        //       },
+        //       {
+        //           "asset": "SOL",
+        //           "amount": "5",
+        //           "price": "150",
+        //           "actual_value": "750",
+        //           "buy_value": "800",
+        //           "mean_buy": "160",
+        //           "ongoing_pnl": "-50"
+        //       }
+        //   ]
+        // }
+
+        let walletData = fetchBinanceData();
 
         displayNewData(walletData);
         return walletData;
