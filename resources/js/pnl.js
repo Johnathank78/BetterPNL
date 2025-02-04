@@ -266,8 +266,11 @@ function pnl(){
     }
 
     function updateGlobalElements(bank, pnl) {
+        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
         $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">USDC</span>');
         $('.global_elem.pnl .elem_data').html(pnl + ' <span class="currency">USDC</span>');
+
+        $('.pnl_data').css('color', pnlColor)
     };
 
     function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean_buy, ongoing_pnl) {
@@ -277,7 +280,7 @@ function pnl(){
         // Determine the sign and color based on the PnL value
         const sign = pnlNumber >= 0 ? '+' : '-';
         const formattedPnl = sign + Math.abs(pnlNumber);
-        const pnlColor = pnlNumber >= 0 ? 'var(--green)' : 'var(--red)';
+        const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
     
         // Build the HTML using a template literal
         const tileHtml = `
