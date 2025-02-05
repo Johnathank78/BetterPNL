@@ -32,17 +32,29 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-.IOSbacker{
-    z-index: 10000;
-    position: absolute;
-    
-    height: 100%;
-    width: 25px;
+#IOSbackerUI {
+    z-index: 1001;
+    position: fixed;
 
-    background-color: rgba(31, 28, 45, 0);
+    top: 0;
+    left: 0;
+    width: 100vw; 
+    height: 100vh;
+    background: black; /* or any background/gradient */
 
-    top : 0;
+    /* Fallback polygon for older browsers → zero-width strip on the left. */
+    clip-path: polygon(0 0, 0 100%, 0 100%);
+    -webkit-clip-path: polygon(0 0, 0 100%, 0 100%);
+  
+    /* Transition for snap-back */
+    transition: clip-path 0.3s ease, -webkit-clip-path 0.3s ease;
+    -webkit-transition: clip-path 0.3s ease, -webkit-clip-path 0.3s ease;;
+          
+    /* So this div doesn't block interaction with the page behind it. */
+    pointer-events: none;
+    display: none;
 }
+
 
 .imgSet{
     display: none;
@@ -191,7 +203,7 @@ body{
     bottom: 0;
 
     width: calc(100% - 30px);
-    height: 85%;
+    height: 87%;
 
     padding: 0 15px;
 
@@ -236,9 +248,8 @@ body{
     font-size: 25px;
 }
 
-.currency{
-    font-size: 14px;
-    opacity: .8;
+.elem_data > span{
+    font-size: 23px;
 }
 
 .detail_wrapper{
@@ -327,7 +338,7 @@ body{
     width: calc(100% - 30px);
     height: calc(200px - 30px);
 
-    border-radius: 8px;
+    border-radius: 8px !important;
     background-color: var(--light-color);
 }
 
@@ -426,3 +437,46 @@ body{
             -ms-user-select: none;
                 user-select: none;
 }
+
+.skeleton {
+    /* We need some fixed dimensions or min-dimensions so the skeleton is visible */
+    min-width: 120px;      /* adjust as needed */
+    min-height: 1em;
+    border-radius: 5px;
+    background: #ccc;      /* base gray background */
+    color: transparent;    /* hide the actual text */
+    position: relative;
+    overflow: hidden;      /* so the shimmer doesn't overflow edges */
+    opacity: 0.1;          /* overall opacity for the skeleton block */
+  }
+  
+  /* The shimmering gradient overlay */
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    
+    /* A simple left-to-right gradient */
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,1) 50%,
+      transparent 100%
+    );
+  
+    /* The animation that slides it */
+    animation: shimmer 1.2s infinite;
+  }
+  
+  /* Keyframes that move the gradient from left to right */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(500%);
+    }
+  }
