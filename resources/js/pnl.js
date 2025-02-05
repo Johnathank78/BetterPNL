@@ -1,9 +1,8 @@
 function pnl(){
 
-    // INIT
+    // GLOBAL VARS
 
     const isMobile = /Mobi/.test(navigator.userAgent);
-    const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     const DRAG_THRESHOLD = 15;
     const MAX_PULL = 30;
@@ -13,18 +12,18 @@ function pnl(){
     var backerX = 0;
 
     var current_page = "app";
-    $('img').attr('draggable', false);
+    var walletData = false;
+    var API = false;
+    var isFetching = false;
+    var isLogged = false;
 
-    // GET DATA
+    // STORED DATA
 
     function api_read(){
         let data = localStorage.getItem("api");
 
         if(data === null || data == ""){
-            api_save({
-                "API": "noData",
-                "SECRET": "noData"
-            });
+            isLogged = false;
             
             return {
                 "API": "noData",
@@ -32,6 +31,8 @@ function pnl(){
             };
         }else{ 
             data = JSON.parse(data);
+            isLogged = true;
+
             return data;
         };
     };
@@ -39,6 +40,10 @@ function pnl(){
     function api_save(data){
         localStorage.setItem("api", JSON.stringify(data));
         return;
+    };
+
+    function api_delete(){
+      localStorage.removeItem("api")
     };
 
     function filter_read(){
@@ -65,12 +70,9 @@ function pnl(){
       return;
     };
     
-    // UTILITY
+    // DATA FETCH 
 
-    // -------------------------------
-    // 1) Minimal HMAC-SHA256 in Browser
-    // -------------------------------
-    async function signHmacSha256(queryString, secret) {
+    async function signHmacSha256(queryString, secret){
       // Using SubtleCrypto
       const encoder = new TextEncoder();
       const keyData = encoder.encode(secret);
@@ -92,19 +94,14 @@ function pnl(){
       return signatureHex;
     }
 
-    // -------------------------------
-    // 2) Proxy call
-    //    We'll post { apiKey, endpoint, queryString }
-    //    The server returns the Binance JSON
-    // -------------------------------
-    async function callBinanceProxy(apiKey, endpoint, queryString) {
+    async function callBinanceProxy(apiKey, endpoint, queryString){
       const payload = {
         apiKey: apiKey,
         endpoint: endpoint,
         queryString: queryString
       };
 
-      const response = await fetch("https://betterpnlget.up.railway.app/proxySigned", {
+      const response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -120,21 +117,17 @@ function pnl(){
       return data;
     }
 
-    // -------------------------------
-    // 3) Get Account Info
-    // -------------------------------
-    async function getAccountInfo(apiKey, apiSecret) {
+    async function getAccountInfo(apiKey, apiSecret){
       const timestamp = Date.now();
+
       let queryString = `timestamp=${timestamp}`;
       const signature = await signHmacSha256(queryString, apiSecret);
       queryString += `&signature=${signature}`;
+
       return callBinanceProxy(apiKey, "/api/v3/account", queryString);
     }
 
-    // -------------------------------
-    // 4) Get Trades for a Symbol
-    // -------------------------------
-    async function getMyTrades(apiKey, apiSecret, symbol) {
+    async function getMyTrades(apiKey, apiSecret, symbol){
       const timestamp = Date.now();
       let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
       const signature = await signHmacSha256(queryString, apiSecret);
@@ -142,12 +135,7 @@ function pnl(){
       return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
     }
 
-    // -------------------------------
-    // 5) Get Ticker (public endpoint)
-    //    You can either call the same proxy (no signature needed),
-    //    or directly fetch from Binance if CORS is allowed.
-    // -------------------------------
-    async function getSymbolPrice(symbol) {
+    async function getSymbolPrice(symbol){
       // Let's try direct fetch (public endpoint).
       // If CORS blocks it, do the same "proxy" approach
       const url = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
@@ -158,11 +146,18 @@ function pnl(){
       return resp.json();
     }
 
-    // -------------------------------
-    // 6) Compute Average Purchase Price
-    //    Mirroring your Python function "calculer_prix_achat_moyen"
-    // -------------------------------
-    function computeAveragePrice(trades) {
+    async function getUserData(){
+      isFetching = true
+
+      let walletData = await fetchAndComputePortfolio(API['API'], API['SECRET']);
+
+      isFetching = false;
+      return walletData;
+    };
+
+    // DATA PROCESSING
+
+    function computeAveragePrice(trades){
       // Sort by time ascending
       trades.sort((a, b) => a.time - b.time);
 
@@ -190,11 +185,7 @@ function pnl(){
       return null;
     }
 
-    // -------------------------------
-    // 7) Main Logic: replicate afficher_actifs() in JS
-    //    We'll produce final JSON { global: {...}, coins: [...] }
-    // -------------------------------
-    async function fetchAndComputePortfolio(apiKey, apiSecret) {
+    async function fetchAndComputePortfolio(apiKey, apiSecret){
       const result = {
         global: { bank: 0, pnl: 0 },
         coins: []
@@ -309,27 +300,45 @@ function pnl(){
       return result;
     }
 
-    //--------
-    
-    async function getUserData(){
-        let walletData = await fetchAndComputePortfolio(API['API'], API['SECRET']);
-        return walletData;
+    // GENERATE n DISPLAY
+
+    function fetchStyleUpdate(fetching, refresh=false){
+      if(fetching){
+        $('.detail_connect').remove();
+        $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').text('');
+        $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
+
+        if(!refresh){
+          $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div><div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+        };
+
+        $('.refresh').css('opacity', '.3');
+      }else{
+        $('.refresh').css('opacity', '1');
+        $('.skeleton').removeClass('skeleton');
+      }
     };
 
-    function displayNewData(walletData){
+    function initDOMupdate(connected){
+      if(connected){
+        $('.elem_data').addClass('skeleton');
+        $('.detail_connect').remove();
+        fetchStyleUpdate(true);
+      }else{
+        fetchStyleUpdate(false);
+        $('.detail_elem_wrapper').append('<div class="detail_connect">CONNECT TO API</div>');
+        $('.refresh').css('opacity', '.3');
+      };
+    };
+
+    function clearData(){
       $('.detail_elem_wrapper').children().remove();
+      $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
+      $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
+      $('.pnl_data').css('color', 'var(--gray)')
+    };
 
-      if(API['API'] == "noData" || walletData == false){return};
-
-      updateGlobalElements(walletData.global.bank, walletData.global.pnl);
-      filterWalletData(walletData).coins.forEach(function(coin) {
-        if(coin.asset != 'USDC'){
-          generateAndPushTile(coin.asset, coin.amount, coin.price, coin.actual_value, coin.buy_value, coin.mean_buy, coin.ongoing_pnl);
-        };
-      });
-    }
-
-    function updateGlobalElements(bank, pnl) {
+    function updateGlobalElements(bank, pnl){
         const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
         $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
         $('.global_elem.pnl .elem_data').html(pnl + ' <span class="currency">$</span>');
@@ -380,15 +389,8 @@ function pnl(){
         // Append the generated tile to the container with class ".detail_elem_wrapper"
         $('.detail_elem_wrapper').append(tileHtml);
     };
-    
-    function closeConnect(){
-      $('#api_key-val').val(API['API']);
-      $('#api_secret-val').val(API['SECRET']);
-      $('.blurBG').css('display', 'none');
-      current_page = 'app'
-    };
 
-    function filterWalletData(data) {
+    function filterWalletData(data){
       const mode = $("#sortingVar").val();  // "Name" | "PNL" | "Amount" (example)
       const way = $("#sortingWay").val();   // "ASC" | "DESC"
       
@@ -422,20 +424,39 @@ function pnl(){
       return data; 
     };
 
+    function displayNewData(walletData){
+      $('.detail_elem_wrapper').children().remove();
+
+      if(API['API'] == "noData" || walletData == false){return};
+
+      updateGlobalElements(walletData.global.bank, walletData.global.pnl);
+      filterWalletData(walletData).coins.forEach(function(coin) {
+        if(coin.asset != 'USDC'){
+          generateAndPushTile(coin.asset, coin.amount, coin.price, coin.actual_value, coin.buy_value, coin.mean_buy, coin.ongoing_pnl);
+        };
+      });
+    };
+
+    async function getDataAndDisplay(refresh=false) {
+      fetchStyleUpdate(true, refresh);
+
+      walletData = await getUserData();
+      displayNewData(walletData);
+
+      fetchStyleUpdate(false);
+    };
+
     async function refreshData(filter=false){
       if(filter){
           displayNewData(walletData)
       }else{
-          $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').text('');
-          $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
-
-          walletData = await getUserData();
-          displayNewData(walletData);
+          getDataAndDisplay(true);
       };
 
-      $('.skeleton').removeClass('skeleton');
     };
-
+    
+    // NAVIGATION
+    
     function goBack(){
         if(current_page == "app"){
             return
@@ -521,26 +542,12 @@ function pnl(){
         };
     };
 
-    $(".IOSbacker").on("touchstart", function(e){
-        e.preventDefault();
-    }).on("touchmove", function(e){
-        backerX = e.touches[0].clientX;
-    }).on("touchend", function(){
-        if(backerX > 50){
-            goBack(platform);
-        };
-    });
-
-    // NAVIGATION
-
-    // EVENT HANDLERS
-
     if(isMobile){
         $('#IOSbackerUI').css('display', "block");
 
-        $(document).on("mousedown", backerMousedownHandler);
-        $(document).on("mousemove", backerMousemoveHandler);
-        $(document).on("mouseup", backerMouseupHandler);
+        $(document).on("touchstart", backerMousedownHandler);
+        $(document).on("touchmove", backerMousemoveHandler);
+        $(document).on("touchend", backerMouseupHandler);
 
         $('#IOSbackerUI').on('backed', function(){
             goBack();
@@ -548,6 +555,21 @@ function pnl(){
     }else{
         $('#IOSbackerUI').remove();
     };
+
+    function closeConnect(){
+      if($('#api_key-val').val() != ""){
+        $('#api_key-val').val(API['API']);
+      };
+
+      if($('#api_secret-val').val() != ""){
+        $('#api_secret-val').val(API['SECRET']);
+      };
+
+      $('.blurBG').css('display', 'none');
+      current_page = 'app'
+    };
+
+    // EVENT HANDLERS
 
     $('.detail_select').on('change', function(){
         filter_save({
@@ -559,10 +581,12 @@ function pnl(){
     });
 
     $('.refresh').on('click', function(){
+      if(!isFetching && isLogged){
         refreshData();
+      };
     });
 
-    $('.profile_connect').on('click', function(){
+    $(document).on('click', '.profile_connect, .detail_connect', function(){
         $('.blurBG').css('display', 'flex');
         current_page = 'connect'
     });
@@ -583,7 +607,13 @@ function pnl(){
             api_save(API);
             
             closeConnect();
-            refreshData();
+            getDataAndDisplay();
+        }else{
+            api_delete();
+            closeConnect();
+
+            clearData();
+            initDOMupdate(false);
         };
     });
 
@@ -595,16 +625,20 @@ function pnl(){
 
     // INIT
 
-    var walletData = false;
-    var API = api_read();
+    $('img').attr('draggable', false);
+
+    API = api_read();
     filter_read();
 
-    if(API['API'] != "noData"){
-        $('#api_key-val').val(API['API']);
-        $('#api_secret-val').val(API['SECRET']);
+    if(isLogged){
+      $('#api_key-val').val(API['API']);
+      $('#api_secret-val').val(API['SECRET']);
 
-        refreshData();
-    };
+      initDOMupdate(true);
+      getDataAndDisplay();
+    }else{
+      initDOMupdate(false);
+    }
 };
 
 //RUN
