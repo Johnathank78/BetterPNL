@@ -104,7 +104,7 @@ function pnl(){
         queryString: queryString
       };
 
-      const response = await fetch("https://betterpnlgetdata-production.up.railway.app:8080/proxySigned", {
+      const response = await fetch("https://betterpnlget.up.railway.app/proxySigned", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
