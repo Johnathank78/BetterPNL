@@ -125,8 +125,29 @@ body{
     border-radius: 12px;
 }
 
-.connect_mainText{
+.pnl_data{
+    color: var(--gray);
+}
 
+.detail_connect{
+    position: absolute;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    width: 150px;
+    height: 35px;
+
+    font-size: 14px;
+    background-color: var(--superLight-color);
+    border-radius: 7px;
+
+    cursor: pointer;
 }
 
 .connectBody_wrapper{
@@ -162,8 +183,17 @@ body{
 
     font-size: 16px;
 
+    overflow-x: scroll;
+
     outline: none;
     border: none;
+
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+.connect_element_input::-webkit-scrollbar{
+    display: none;
 }
 
 
@@ -307,6 +337,8 @@ body{
 }
 
 .detail_elem_wrapper{
+    position: relative;
+
     display: flex;
     flex-direction: column;
 
@@ -429,15 +461,6 @@ body{
     background-color: var(--light-yellow);
 }
 
-.noselect{
-    -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-                user-select: none;
-}
-
 .skeleton {
     /* We need some fixed dimensions or min-dimensions so the skeleton is visible */
     min-width: 120px;      /* adjust as needed */
@@ -448,35 +471,44 @@ body{
     position: relative;
     overflow: hidden;      /* so the shimmer doesn't overflow edges */
     opacity: 0.1;          /* overall opacity for the skeleton block */
-  }
-  
-  /* The shimmering gradient overlay */
-  .skeleton::after {
+}
+
+/* The shimmering gradient overlay */
+.skeleton::after {
     content: "";
     position: absolute;
     top: 0;
     left: -150%;
     width: 50%;
     height: 100%;
-    
+
     /* A simple left-to-right gradient */
     background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255,255,255,1) 50%,
-      transparent 100%
+        90deg,
+        transparent 0%,
+        rgba(255,255,255,1) 50%,
+        transparent 100%
     );
-  
+
     /* The animation that slides it */
     animation: shimmer 1.2s infinite;
-  }
-  
-  /* Keyframes that move the gradient from left to right */
-  @keyframes shimmer {
+}
+
+/* Keyframes that move the gradient from left to right */
+@keyframes shimmer {
     0% {
-      transform: translateX(0);
+        transform: translateX(0);
     }
     100% {
-      transform: translateX(500%);
+        transform: translateX(500%);
     }
-  }
+}
+
+.noselect{
+    -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+                user-select: none;
+}
