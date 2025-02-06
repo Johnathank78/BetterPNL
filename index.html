@@ -67,15 +67,23 @@
     <link rel="stylesheet" href="./resources/css/pnl.css"/>
 
     <script src="./resources/js/jquery.js"></script>
+    <script src="./resources/js/bottomNotification.js"></script>
     <script src="./resources/js/pnl.js"></script>
 </head>
 
 <body>
     <div class="app noselect">  
         <div class="IOSbacker noselect" id="IOSbackerUI"></div>
+        <div class="bottomNotification noselect">
+            <span class="bottomNotification_msg">[W] PDT scheduled</span>
+            <img src="./resources/imgs/tick.png" alt="" class="bottomNotification_Icon">
+        </div>
 
         <div class="imgSet">
-            <img src="resources/imgs/pnl_logo.png" alt="" id="logoIMG">
+            <img src="./resources/imgs/add.svg" alt="" id="addIMG">
+            <img src="./resources/imgs/bin.svg" alt="" id="binIMG">
+            <img src="./resources/imgs/tick.png" alt="" id="tickIMG">
+            <img src="./resources/imgs/pnl_logo.png" alt="" id="logoIMG">
         </div>
 
         <img src="./resources/imgs/pnl_logo.png" alt="" class="logo">
@@ -96,7 +104,10 @@
                     </div>
                 </div>
 
-                <div class="connect_submit">SUBMIT</div>
+                <div class="connect_bottomLine">
+                    <div class="connect_submit">CONNECT</div>
+                    <div class="connect_disconnect"><img src="./resources/imgs/bin.svg" alt=""></div>
+                </div>
             </div>
         </div>
 

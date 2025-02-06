@@ -440,8 +440,38 @@ body{
     background-color: var(--light-yellow);
 }
 
+.connect_bottomLine{
+    display: flex;
+
+    flex-direction: row;
+    gap: 15px;
+
+    height: 30px;
+    width: 100%;
+}
+
+.connect_disconnect{
+    display: flex;
+    justify-content: center;
+    align-content: center;
+
+    width: 30px;
+    height: 30px;
+
+    background-color: var(--red);
+    border-radius: 6px;
+
+    cursor: pointer;
+}
+
+.connect_disconnect > img{
+    width: 55%;
+}
+
 .connect_submit{
     display: flex;
+
+    flex-grow: 1;
 
     align-items: center;
     justify-content: center;
@@ -450,8 +480,7 @@ body{
     background-color: var(--yellow);
     font-size: 15px;
 
-    height: 30px;
-    width: 100%;
+
     border-radius: 6px;
 
     cursor: pointer;
@@ -459,6 +488,54 @@ body{
 
 .connect_submit:active{
     background-color: var(--light-yellow);
+}
+
+.bottomNotification{
+    z-index: 1001;
+    position: absolute;
+    
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+
+    align-items: center;
+
+    height: 50px;
+
+    width: auto;
+    max-width: calc(100vw);
+    
+    left: 50%;
+    bottom: -55px;
+
+    transform: translateX(-50%);
+    
+    padding: 0px 15px 0px 15px;
+    border-radius: 12px;
+    
+    background-color: #85daaa;
+    
+    overflow: scroll;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+
+    display: none;
+}
+
+.bottomNotification::-webkit-scrollbar{
+    display: none;
+}
+
+.bottomNotification_Icon{
+    filter: invert(25%) sepia(14%) saturate(3278%) hue-rotate(99deg) brightness(94%) contrast(89%);
+    width: 14px;
+    height: 14px;
+}
+
+.bottomNotification_msg{
+    color: #0e5a2e;
+    font-weight: 500;
+    font-size: 18px;
 }
 
 .skeleton {
