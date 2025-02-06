@@ -14,6 +14,7 @@ function pnl(){
   var current_page = "app";
   var walletData = false;
   var API = false;
+  var params = false;
   var isFetching = false;
   var isLogged = false;
   var firstLog = true;
@@ -47,27 +48,32 @@ function pnl(){
     localStorage.removeItem("api")
   };
 
-  function filter_read(){
-    let data = localStorage.getItem("filter");
+  function params_read(){
+    let data = localStorage.getItem("params");
 
-      if(data === null || data == ""){
-        $("#sortingVar").val("Name");
-        $("#sortingWay").val("Asc");
+    if(data === null || data == ""){
+      $("#sortingVar").val("Name");
+      $("#sortingWay").val("Asc");
 
-        return {
+      return {
+          "autoRefresh": false,
+          "filter": {
             "var": "Name",
             "way": "Asc"
-        };
-      }else{ 
-        data = JSON.parse(data);
-
-        $("#sortingVar").val(data['var']);
-        $("#sortingWay").val(data['way']);
+          }
       };
+    }else{ 
+      data = JSON.parse(data);
+
+      $("#sortingVar").val(data['filter']['var']);
+      $("#sortingWay").val(data['filter']['way']);
+    };
+
+    return data;
   }
 
-  function filter_save(data){
-    localStorage.setItem("filter", JSON.stringify(data));
+  function params_save(data){
+    localStorage.setItem("params", JSON.stringify(data));
     return;
   };
   
@@ -109,9 +115,14 @@ function pnl(){
     });
 
     if (!response.ok) {
-      bottomNotification('fetchError', response.status)
+      bottomNotification('fetchError', response.status);
+      clearData(false);
       throw new Error("Proxy error: " + response.status);
-    }
+    }else if(firstLog && isLogged){
+      firstLog = false;
+      bottomNotification("connected");
+    };
+
     const data = await response.json();
     if (data.error) {
       throw new Error(data.error);
@@ -125,11 +136,6 @@ function pnl(){
     let queryString = `timestamp=${timestamp}`;
     const signature = await signHmacSha256(queryString, apiSecret);
     queryString += `&signature=${signature}`;
-
-    if(firstLog){
-      firstLog = false;
-      bottomNotification("connected");
-    };
 
     return callBinanceProxy(apiKey, "/api/v3/account", queryString);
   }
@@ -328,6 +334,18 @@ function pnl(){
   };
 
   function initDOMupdate(connected){
+    if(params['autoRefresh']){
+      $('.autoRefreshing').css({
+        'backgroundColor': 'var(--yellow)',
+        'color': 'black'
+      });
+    }else{
+      $('.autoRefreshing').css({
+        'backgroundColor': 'var(--light-color)',
+        'color': 'white'
+      });
+    };
+
     if(connected){
       $('.elem_data').addClass('skeleton');
       $('.detail_connect').remove();
@@ -339,23 +357,26 @@ function pnl(){
     };
   };
 
-  function clearData(){
+  function clearData(loginToo=true){
     $('.detail_elem_wrapper').children().remove();
     $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
     $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
     $('.pnl_data').css('color', 'var(--gray)');
 
-    $('#api_key-val').val("");
-    $('#api_secret-val').val("");
-
-    API = {
-      "API": "noData",
-      "SECRET": "noData"
+    if(loginToo){
+      $('#api_key-val').val("");
+      $('#api_secret-val').val("");
+  
+      API = {
+        "API": "noData",
+        "SECRET": "noData"
+      };
+  
+      bottomNotification("deleteUser");
+      api_delete();
+      isLogged = false;
     };
 
-    api_delete();
-    bottomNotification("deleteUser");
-    isLogged = false;
 
     initDOMupdate(false);
   };
@@ -413,8 +434,8 @@ function pnl(){
   };
 
   function filterWalletData(data){
-    const mode = $("#sortingVar").val();  // "Name" | "PNL" | "Amount" (example)
-    const way = $("#sortingWay").val();   // "ASC" | "DESC"
+    const mode = params['filter']['var'];  // "Name" | "PNL" | "Amount" (example)
+    const way = params['filter']['way'];   // "ASC" | "DESC"
     
     data.coins.sort((a, b) => {
       switch (mode) {
@@ -460,12 +481,16 @@ function pnl(){
   };
 
   async function getDataAndDisplay(refresh=false) {
-    fetchStyleUpdate(true, refresh);
+    if(isLogged){
+      fetchStyleUpdate(true, refresh);
+  
+      walletData = await getUserData();
 
-    walletData = await getUserData();
-    displayNewData(walletData);
-
-    fetchStyleUpdate(false);
+      if(isLogged){
+        displayNewData(walletData);
+        fetchStyleUpdate(false);
+      };
+    };
   };
 
   async function refreshData(filter=false){
@@ -594,11 +619,10 @@ function pnl(){
   // EVENT HANDLERS
 
   $('.detail_select').on('change', function(){
-      filter_save({
-        "var": $("#sortingVar").val(),
-        "way": $("#sortingWay").val()
-      })
+      params['filter']['var'] = $("#sortingVar").val();
+      params['filter']['way'] = $("#sortingWay").val();
 
+      params_save(params);
       refreshData(true);
   });
 
@@ -625,7 +649,8 @@ function pnl(){
       if(api != "" && secret != ""){
           API["API"] = api;
           API["SECRET"] = secret
-  
+
+          isLogged = true;
           api_save(API);
           
           closeConnect();
@@ -634,11 +659,28 @@ function pnl(){
   });
 
   $('.connect_disconnect').on('click', function(){
-    if(isLogged){      
+    if(isLogged){
       clearData();
       closeConnect();
       firstLog = true;
     };
+  });
+
+  $('.autoRefreshing').on('click', function(){
+    if(params['autoRefresh']){
+      $('.autoRefreshing').css({
+        'backgroundColor': 'var(--light-color)',
+        'color': 'white'
+      });
+    }else{
+      $('.autoRefreshing').css({
+        'backgroundColor': 'var(--yellow)',
+        'color': 'black'
+      });
+    };
+
+    params['autoRefresh'] = !params['autoRefresh'];
+    params_save(params);
   });
 
   // GRAPHIC UPDATE
@@ -652,7 +694,8 @@ function pnl(){
   $('img').attr('draggable', false);
 
   API = api_read();
-  filter_read();
+  params = params_read();
+
 
   if(isLogged){
     firstLog = false;
@@ -660,10 +703,15 @@ function pnl(){
     $('#api_secret-val').val(API['SECRET']);
 
     initDOMupdate(true);
-    getDataAndDisplay();
+    getDataAndDisplay(false);
   }else{
     initDOMupdate(false);
-  }
+  };
+
+  setInterval(() => {
+    if(!isFetching && isLogged && params['autoRefresh']){refreshData()};
+  }, 2 * 60 * 1000);
+
 };
 
 //RUN

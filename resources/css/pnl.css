@@ -218,6 +218,25 @@ body{
     cursor: pointer;
 }
 
+.autoRefreshing{
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    height: 36px;
+    padding: 0 10px;
+
+    font-size: 12px;
+    background-color: var(--light-color);
+    border-radius: 7px;
+
+    right: 65px;
+    top: 20px;
+
+    cursor: pointer;
+}
+
 .proifleIcon{
     width: 100%;
     height: 100%;
@@ -501,14 +520,15 @@ body{
     align-items: center;
 
     height: 50px;
-
-    max-width: calc(100vw);
     
-    left: 50%;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: fit-content;
+    max-width: 75vw;
+    
     bottom: -55px;
 
-    transform: translateX(-50%);
-    
     padding: 0px 15px 0px 15px;
     border-radius: 12px;
     
