@@ -144,6 +144,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
   if (!response.ok) {
     bottomNotification('fetchError', response.status);
     clearData(false);
+
     throw new Error("Proxy error: " + response.status);
   }else if(firstLog && isLogged){
     firstLog = false;
@@ -402,7 +403,7 @@ function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean
                     <span class="detail_subElem_data buy_value">${buy_value} $</span>
                 </div>
                 <div class="detail_subElem">
-                    <span class="detail_subElem_title">ONGOIN PNL</span>
+                    <span class="detail_subElem_title">ONGOING PNL</span>
                     <span class="detail_subElem_data pnl_data" style="color: ${pnlColor};">${formattedPnl} $</span>
                 </div>
             </div>
@@ -505,7 +506,7 @@ function initDOMupdate(connected){
     fetchStyleUpdate(true);
   }else{
     fetchStyleUpdate(false);
-    $('.detail_elem_wrapper').append('<div class="detail_connect">CONNECT TO API</div>');
+    $('.detail_elem_wrapper').append('<span class="detail_connect">CONNECT TO API</span>');
     $('.refresh').css('opacity', '.3');
   };
 };
@@ -637,12 +638,13 @@ function isApop(walletData, oldWalletData){
     return;
   };
 
+  const difference = currentPNL - oldPNL;
   const percentageChange = ((currentPNL - oldPNL) / Math.abs(oldPNL)) * 100;
 
   if (percentageChange >= 4.5) {
-    showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+percentageChange.toFixed(2)});
+    showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+Math.abs(percentageChange).toFixed(2).toString()+"% | +"+ Math.abs(difference).toString()+"$"});
   } else if (percentageChange <= -3.5) {
-    showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+percentageChange.toFixed(2)});
+    showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+Math.abs(percentageChange).toFixed(2).toString()+"% | -"+ Math.abs(difference).toString()+"$"});
   };
 
   return;
@@ -821,6 +823,7 @@ function pnl(){
 
   $('.refreshTiming').on('change', function(){
     params['refreshTime'] = parseInt($(this).val());
+    params_save(params);
 
     if(params['autoRefresh']){
       stopTimeout();
