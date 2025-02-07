@@ -1,20 +1,20 @@
-const CACHE_NAME = 'app-cache-v1.5';
+const CACHE_NAME = "app-cache-v1.6";
 
-self.addEventListener('install', event => {
+self.addEventListener("install", event => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => {
             const urlsToCache = [
-                '/BetterPNL/index.html',
-                '/BetterPNL/resources/css/pnl.css',
-                '/BetterPNL/resources/fonts/fonts/GothicA1-Bold.woff',
-                '/BetterPNL/resources/imgs/profile.png',
-                '/BetterPNL/resources/imgs/pnl_logo.png',
-                '/BetterPNL/resources/imgs/smallSS.png',
-                '/BetterPNL/resources/imgs/wideSS.png',
-                '/BetterPNL/resources/imgs/icon.png',
-                '/BetterPNL/resources/js/pnl.js',
-                '/BetterPNL/resources/js/jquery.js',
-                '/BetterPNL/resources/js/binance.js',
+                "./index.html",
+                "./resources/css/pnl.css",
+                "./resources/fonts/fonts/GothicA1-Bold.woff",
+                "./resources/imgs/profile.png",
+                "./resources/imgs/pnl_logo.png",
+                "./resources/imgs/smallSS.png",
+                "./resources/imgs/wideSS.png",
+                "./resources/imgs/icon.png",
+                "./resources/js/pnl.js",
+                "./resources/js/jquery.js",
+                "./resources/js/binance.js",
                 "./resources/splash_screens/iPhone_8_Plus__iPhone_7_Plus__iPhone_6s_Plus__iPhone_6_Plus_portrait.png",
                 "./resources/splash_screens/iPhone_16_Pro_Max_portrait.png",
                 "./resources/splash_screens/10.9__iPad_Air_portrait.png",
@@ -69,12 +69,12 @@ self.addEventListener('install', event => {
 
             return Promise.all(cachePromises);
         }).catch(error => {
-            console.error('Cache open failed:', error);
+            console.error("Cache open failed:", error);
         })
     );
 });
 
-self.addEventListener('activate', event => {
+self.addEventListener("activate", event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
             return Promise.all(
@@ -86,22 +86,34 @@ self.addEventListener('activate', event => {
     );
 });
 
-self.addEventListener('fetch', event => {
+self.addEventListener("fetch", event => {
     event.respondWith(
         caches.open(CACHE_NAME).then(cache => { 
             return cache.match(event.request).then(response => {
                 const fetchPromise = fetch(event.request).then(networkResponse => {
-                    if (event.request.method === 'GET') {
+                    if (event.request.method === "GET") {
                         cache.put(event.request, networkResponse.clone()); // Update cache with new response
                     }
                     return networkResponse;
                 }).catch(error => {
-                    console.error('Fetch failed for:', event.request.url, '; Error:', error);
+                    console.error("Fetch failed for:", event.request.url, "; Error:", error);
                     return response; // Return cached response if fetch fails
                 });
 
                 return response || fetchPromise;
             });
+        })
+    );
+});
+
+self.addEventListener("notificationclick", event => {
+    event.notification.close();
+
+    event.waitUntil(
+        clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
+            if(clientList.length > 0){return clientList[0].focus()};
+
+            return clients.openWindow("/");
         })
     );
 });

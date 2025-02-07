@@ -66,6 +66,19 @@
 
     <link rel="stylesheet" href="./resources/css/pnl.css"/>
 
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/BetterPNL/service-worker.js').then(registration => {
+                    console.log('Service worker registered:', registration);
+                }).catch(error => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
+        };
+    </script>
+
+
     <script src="./resources/js/jquery.js"></script>
     <script src="./resources/js/bottomNotification.js"></script>
     <script src="./resources/js/pnl.js"></script>
@@ -88,7 +101,7 @@
 
         <img src="./resources/imgs/pnl_logo.png" alt="" class="logo">
         <div class="profile_connect"><img src="resources/imgs/profile.png" alt="" class="proifleIcon"></div>
-        <div class="autoRefreshing">AUTO FETCH</div>
+        <div speed="750" alert="false" class="autoRefreshing longClickable">AUTO FETCH</div>
 
         <div class="blurBG">
             <div class="connect_wrapper">

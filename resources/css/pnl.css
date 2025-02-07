@@ -435,7 +435,7 @@ body{
 }
 
 .detail_elem_amount{
-    font-size: 14px;
+    font-size: 15px;
     opacity: .6;
 }
 
@@ -567,6 +567,10 @@ body{
     position: relative;
     overflow: hidden;      /* so the shimmer doesn't overflow edges */
     opacity: 0.1;          /* overall opacity for the skeleton block */
+}
+
+.skeleton > *{
+    display: none;
 }
 
 /* The shimmering gradient overlay */
