@@ -1,4 +1,4 @@
-const CACHE_NAME = "app-cache-v2";
+const CACHE_NAME = "app-cache-v2.1";
 
 self.addEventListener("install", event => {
     event.waitUntil(
@@ -13,8 +13,8 @@ self.addEventListener("install", event => {
                 "BetterPNL/resources/imgs/wideSS.png",
                 "BetterPNL/resources/imgs/icon.png",
                 "BetterPNL/resources/js/pnl.js",
+                "BetterPNL/resources/js/bottomNotification.js",
                 "BetterPNL/resources/js/jquery.js",
-                "BetterPNL/resources/js/binance.js",
                 "BetterPNL/resources/splash_screens/iPhone_8_Plus__iPhone_7_Plus__iPhone_6s_Plus__iPhone_6_Plus_portrait.png",
                 "BetterPNL/resources/splash_screens/iPhone_16_Pro_Max_portrait.png",
                 "BetterPNL/resources/splash_screens/10.9__iPad_Air_portrait.png",

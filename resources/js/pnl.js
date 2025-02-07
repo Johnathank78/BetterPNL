@@ -828,13 +828,15 @@ function pnl(){
     };
   });
 
-  if(document.visibilityState === 'hidden'){
-    if(params['autoRefresh']){stopTimeout()};
-  }else if(document.visibilityState === 'visible'){
-    if(!isFetching && isLogged){
-      refreshData();
+  document.addEventListener("visibilitychange", async () => {
+    if(document.visibilityState === 'hidden'){
+      if(params['autoRefresh']){stopTimeout()};
+    }else if(document.visibilityState === 'visible'){
+      if(!isFetching && isLogged){
+        refreshData();
+      };
     };
-  };
+  });
 
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
