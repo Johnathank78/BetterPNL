@@ -11,6 +11,8 @@ var backerX = 0;
 
 var current_page = "app";
 var walletData = false;
+var oldWalletData = false;
+
 var API = false;
 var params = false;
 var isFetching = false;
@@ -37,6 +39,10 @@ function stopTimeout(){
   clearTimeout(refreshTimeout);
   refreshTimeout = null;
 };
+
+function cloneOBJ(obj){
+  return JSON.parse(JSON.stringify(obj));
+}
 
 // STORED DATA
 
@@ -183,6 +189,7 @@ async function getUserData(){
   isFetching = true
 
   let walletData = await fetchAndComputePortfolio(API['API'], API['SECRET']);
+  if(haveWebNotificationsBeenAccepted && oldWalletData){isApop(walletData, oldWalletData)};
 
   isFetching = false;
 
@@ -457,6 +464,8 @@ async function getDataAndDisplay(refresh=false) {
     fetchStyleUpdate(true, refresh);
 
     walletData = await getUserData();
+    oldWalletData = cloneOBJ(walletData);
+
     if(params['autoRefresh']){startTimeout(params['refreshTime'])};
 
     if(isLogged){
@@ -567,19 +576,19 @@ function showNotif({ title, body }){
   if(Notification.permission === 'default'){
       Notification.requestPermission().then(permission => {
           if (permission === 'granted') {
-              sendNotification(title, body, './resources/imgs/appLogo.png');
+              sendNotification(title, body);
           } else {
               console.warn('Notification permission denied.');
           };
       });
   }else if(Notification.permission === 'granted'){
-      sendNotification(title, body, './resources/imgs/appLogo.png');
+      sendNotification(title, body);
   }else{
       console.warn('Notifications are disabled.');
   };
 };
 
-function sendNotification(title, body, icon){
+function sendNotification(title, body){
   let tag = 'simple-notification';
 
   navigator.serviceWorker.ready.then(registration => {
@@ -589,51 +598,15 @@ function sendNotification(title, body, icon){
 
       registration.showNotification(title,{
           body,
-          icon,
           tag
       });
   }).catch(err => {
       console.error('Failed to send notification via Service Worker:', err);
   });
-};
 
-function showNotif({ title, body }){
-    if(!('Notification' in window)){
-        console.warn('Notifications are not supported in this browser.');
-        return;
-    }
-
-    if(Notification.permission === 'default'){
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                sendNotification(title, body, './resources/imgs/appLogo.png');
-            } else {
-                console.warn('Notification permission denied.');
-            };
-        });
-    }else if(Notification.permission === 'granted'){
-        sendNotification(title, body, './resources/imgs/appLogo.png');
-    }else{
-        console.warn('Notifications are disabled.');
-    };
-};
-
-function sendNotification(title, body, icon){
-    let tag = 'simple-notification';
-
-    navigator.serviceWorker.ready.then(registration => {
-        registration.getNotifications({ tag }).then(notifications => {
-            notifications.forEach(notification => notification.close());
-        });
-
-        registration.showNotification(title,{
-            body,
-            icon,
-            tag
-        });
-    }).catch(err => {
-        console.error('Failed to send notification via Service Worker:', err);
-    });
+  setTimeout(() => {
+    deleteNotif(tag)
+  }, 5000);
 };
 
 function deleteNotif(tag = 'simple-notification'){
@@ -653,6 +626,28 @@ function NotificationGrantMouseDownHandler(){
 
   $(document).off("click", NotificationGrantMouseDownHandler);
 };
+
+function isApop(walletData, oldWalletData){
+  const currentPNL = parseFloat(walletData.global.pnl);
+  const oldPNL = parseFloat(oldWalletData.global.pnl); // Ensure oldPNL is a number
+
+  if(isNaN(currentPNL) || isNaN(oldPNL)){
+    console.error("Invalid PNL values.");
+    return;
+  };
+
+  const percentageChange = ((currentPNL - oldPNL) / Math.abs(oldPNL)) * 100;
+
+  if (percentageChange >= 4.5) {
+    showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+percentageChange.toFixed(2)});
+  } else if (percentageChange <= -3.5) {
+    showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+percentageChange.toFixed(2)});
+    console.log("CRASH");
+  };
+
+  return;
+};
+
 
 // HANDLER FUNCTION 
 
@@ -739,20 +734,6 @@ function pnl(){
 
   // EVENT HANDLERS
 
-  $('.detail_select').on('change', function(){
-      params['filter']['var'] = $("#sortingVar").val();
-      params['filter']['way'] = $("#sortingWay").val();
-
-      params_save(params);
-      refreshData(true);
-  });
-
-  $('.refresh').on('click', function(){
-    if(!isFetching && isLogged){
-      refreshData();
-    };
-  });
-
   $(document).on('click', '.profile_connect', function(){
       openConnect();
   });
@@ -762,6 +743,20 @@ function pnl(){
       refreshData();
     }else{
       openConnect();
+    };
+  });
+
+  $('.detail_select').on('change', function(){
+    params['filter']['var'] = $("#sortingVar").val();
+    params['filter']['way'] = $("#sortingWay").val();
+
+    params_save(params);
+    refreshData(true);
+  });
+
+  $('.refresh').on('click', function(){
+    if(!isFetching && isLogged){
+      refreshData();
     };
   });
 
@@ -784,8 +779,6 @@ function pnl(){
             
             closeConnect();
             getDataAndDisplay();
-
-            $(document).on("click", NotificationGrantMouseDownHandler);
           }else{
             closeConnect();
             getDataAndDisplay();
@@ -818,8 +811,6 @@ function pnl(){
       startTimeout(params['refreshTime']);
     };
 
-    if(haveWebNotificationsBeenAccepted){showNotif({title: "TEST", body: "TEST"})};
-
     params['autoRefresh'] = !params['autoRefresh'];
     params_save(params);
   });
@@ -849,6 +840,8 @@ function pnl(){
   }else{
     $('#IOSbackerUI').remove();
   };
+
+  $(document).on("click", NotificationGrantMouseDownHandler);
 
   // GRAPHIC UPDATE
 
