@@ -181,12 +181,14 @@ body{
     background-color: var(--light-color);
     border-radius: 8px;
     
-    padding: 6px 10px;
-    
-    width: 50px;
+    padding: 6px 8px;
+
+    min-width: 22px;
+    max-width: 60px;
     height: 20px;
 
     font-size: 16px;
+    text-align: center;
 
     overflow-x: scroll;
 

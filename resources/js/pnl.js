@@ -1,3 +1,18 @@
+// METHODS
+var originalVal = $.fn.val;
+
+jQuery.fn.getStyleValue = function(prop){
+  return parseFloat($(this).css(prop).replace('px', ''));
+};
+
+jQuery.fn.val = function(){
+  var result = originalVal.apply(this, arguments);
+  if(this.hasClass('resizingInp')){
+      resizeInput(this[0]);
+  };
+  return result;
+};
+
 // GLOBAL VARS
 
 const isMobile = /Mobi/.test(navigator.userAgent);
@@ -42,7 +57,19 @@ function stopTimeout(){
 
 function cloneOBJ(obj){
   return JSON.parse(JSON.stringify(obj));
-}
+};
+
+function resizeInput(input){
+	let fontSize = $(input).getStyleValue('fontSize');
+
+	if(input.value.length == 0){
+		input.style.width = fontSize/1.615384 - fontSize/22.702702 + fontSize/4 + 'px';
+	}else if(input.value.length >= 3){
+		input.style.width = ((3) * ((fontSize/1.615384) - fontSize/22.702702) + fontSize/4) + 'px';
+	}else{
+		input.style.width = ((input.value.length) * ((fontSize/1.615384) - fontSize/22.702702) + fontSize/4) + 'px';
+	};
+};
 
 // STORED DATA
 
@@ -66,6 +93,22 @@ function api_read(){
 
 function api_save(data){
   localStorage.setItem("api", JSON.stringify(data));
+  return;
+};
+
+function old_read(){
+  let data = localStorage.getItem("oldWallet");
+
+  if(data === null || data == ""){
+      return false;
+  }else{ 
+      data = JSON.parse(data);
+      return data;
+  };
+};
+
+function old_save(data){
+  localStorage.setItem("oldWallet", JSON.stringify(data));
   return;
 };
 
@@ -466,7 +509,9 @@ async function getDataAndDisplay(refresh=false) {
     fetchStyleUpdate(true, refresh);
 
     walletData = await getUserData();
+
     oldWalletData = cloneOBJ(walletData);
+    old_save(oldWalletData);
 
     if(params['autoRefresh']){startTimeout(params['refreshTime'])};
 
@@ -831,6 +876,10 @@ function pnl(){
     };
   });
 
+  $(document).on('input', ".resizingInp", function(){
+    resizeInput(this);
+});
+
   document.addEventListener("visibilitychange", async () => {
     if(document.visibilityState === 'hidden'){
       if(params['autoRefresh']){stopTimeout()};
@@ -866,6 +915,7 @@ function pnl(){
 
   API = api_read();
   params = params_read();
+  oldWalletData = old_read();
 
   if(isLogged){
     firstLog = false;
