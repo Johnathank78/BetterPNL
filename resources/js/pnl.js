@@ -91,6 +91,7 @@ if(data === null || data == ""){
 }else{ 
   data = JSON.parse(data);
 
+  $('.refreshTiming').val(data['refreshTime']);
   $("#sortingVar").val(data['filter']['var']);
   $("#sortingWay").val(data['filter']['way']);
 };
@@ -642,7 +643,6 @@ function isApop(walletData, oldWalletData){
     showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+percentageChange.toFixed(2)});
   } else if (percentageChange <= -3.5) {
     showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+percentageChange.toFixed(2)});
-    console.log("CRASH");
   };
 
   return;
@@ -817,6 +817,15 @@ function pnl(){
 
   $('.connect_element_input').on('click', function(){
     this.setSelectionRange(0, this.value.length);
+  });
+
+  $('.refreshTiming').on('change', function(){
+    params['refreshTime'] = parseInt($(this).val());
+
+    if(params['autoRefresh']){
+      stopTimeout();
+      startTimeout(params['refreshTime']);
+    };
   });
 
   if(document.visibilityState === 'hidden'){

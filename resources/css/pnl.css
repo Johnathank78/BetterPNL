@@ -1,12 +1,12 @@
 :root{
-    --dark-color: rgb(24, 26, 32);
+    --dark-color: #181a20;
     --medium-color: rgb(30, 35, 41);
     --light-color: rgb(43, 50, 59);
     --superLight-color: hsl(214, 16%, 30%);
     --yellow: rgb(240, 185, 11);
     --light-yellow: hsl(46, 91%, 60%);
-    --red: rgb(246, 70, 93);
-    --green: rgb(46, 189, 133);
+    --red: #f6465d;
+    --green: #2ebd85;
     --gray: rgb(139, 139, 139);
 }
 
@@ -170,6 +170,31 @@ body{
 
 .connect_element_text{
     font-size: 16px;
+}
+
+.refreshTiming{
+    position: absolute;
+
+    top: 15px;
+    right: 15px;
+
+    background-color: var(--light-color);
+    border-radius: 8px;
+    
+    padding: 6px 10px;
+    
+    width: 50px;
+    height: 20px;
+
+    font-size: 16px;
+
+    overflow-x: scroll;
+
+    outline: none;
+    border: none;
+
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
 }
 
 .connect_element_input{
