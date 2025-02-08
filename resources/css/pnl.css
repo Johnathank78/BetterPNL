@@ -1,13 +1,13 @@
 :root{
     --dark-color: #181a20;
-    --medium-color: rgb(30, 35, 41);
-    --light-color: rgb(43, 50, 59);
-    --superLight-color: hsl(214, 16%, 30%);
-    --yellow: rgb(240, 185, 11);
-    --light-yellow: hsl(46, 91%, 60%);
+    --medium-color: #1e2329;
+    --light-color: #2b323b;
+    --superLight-color: #404b59;
+    --yellow: #f0b90b;
+    --light-yellow: #f6cb3c;
     --red: #f6465d;
     --green: #2ebd85;
-    --gray: rgb(139, 139, 139);
+    --gray: #8b8b8b;
 }
 
 @font-face {

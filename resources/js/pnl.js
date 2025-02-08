@@ -34,9 +34,9 @@ var isFetching = false;
 var isLogged = false;
 var firstLog = true;
 
+var haveWebNotificationsBeenAccepted = false;
 var refreshTimeout = null;
 var longClickTS = false;
-var haveWebNotificationsBeenAccepted = false;
 
 // UTILITY
 
@@ -117,29 +117,30 @@ localStorage.removeItem("api");
 };
 
 function params_read(){
-let data = localStorage.getItem("params");
+  let data = localStorage.getItem("params");
 
-if(data === null || data == ""){
-  $("#sortingVar").val("Name");
-  $("#sortingWay").val("Asc");
+  if(data === null || data == ""){
+    $("#sortingVar").val("Name");
+    $("#sortingWay").val("Asc");
+    $('.refreshTiming').val(120);
 
-  return {
-      "autoRefresh": false,
-      "refreshTime": 120,
-      "filter": {
-        "var": "Name",
-        "way": "Asc"
-      }
+    return {
+        "autoRefresh": false,
+        "refreshTime": 120,
+        "filter": {
+          "var": "Name",
+          "way": "Asc"
+        }
+    };
+  }else{ 
+    data = JSON.parse(data);
+
+    $('.refreshTiming').val(data['refreshTime']);
+    $("#sortingVar").val(data['filter']['var']);
+    $("#sortingWay").val(data['filter']['way']);
   };
-}else{ 
-  data = JSON.parse(data);
 
-  $('.refreshTiming').val(data['refreshTime']);
-  $("#sortingVar").val(data['filter']['var']);
-  $("#sortingWay").val(data['filter']['way']);
-};
-
-return data;
+  return data;
 }
 
 function params_save(data){
@@ -169,7 +170,7 @@ async function signHmacSha256(queryString, secret){
     .map(b => b.toString(16).padStart(2, "0"))
     .join("");
   return signatureHex;
-}
+};
 
 async function callBinanceProxy(apiKey, endpoint, queryString){
   const payload = {
@@ -199,7 +200,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
     throw new Error(data.error);
   }
   return data;
-}
+};
 
 async function getAccountInfo(apiKey, apiSecret){
   const timestamp = Date.now();
@@ -209,15 +210,17 @@ async function getAccountInfo(apiKey, apiSecret){
   queryString += `&signature=${signature}`;
 
   return callBinanceProxy(apiKey, "/api/v3/account", queryString);
-}
+};
 
 async function getMyTrades(apiKey, apiSecret, symbol){
   const timestamp = Date.now();
+
   let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
+
   return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
-}
+};
 
 async function getSymbolPrice(symbol){
   // Let's try direct fetch (public endpoint).
@@ -228,7 +231,7 @@ async function getSymbolPrice(symbol){
     throw new Error(`Error fetching ticker for ${symbol}: ${resp.status}`);
   }
   return resp.json();
-}
+};
 
 async function getUserData(){
   isFetching = true
@@ -269,7 +272,7 @@ function computeAveragePrice(trades){
     return positionCost / positionQty;
   }
   return null;
-}
+};
 
 async function fetchAndComputePortfolio(apiKey, apiSecret){
   const result = {
@@ -384,7 +387,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret){
   result.global.pnl = totalPnl >= 0 ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2);
 
   return result;
-}
+};
 
 // GENERATE n DISPLAY
 
@@ -580,7 +583,6 @@ function clearData(disconnect=true){
     $('.detail_connect').text("RETRY");
   };
 
-
   initDOMupdate(false);
 };
 
@@ -622,10 +624,10 @@ function showNotif({ title, body }){
 
   if(Notification.permission === 'default'){
       Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-              sendNotification(title, body);
-          } else {
-              console.warn('Notification permission denied.');
+          if(permission === 'granted'){
+            sendNotification(title, body);
+          }else{
+            console.warn('Notification permission denied.');
           };
       });
   }else if(Notification.permission === 'granted'){
@@ -653,7 +655,7 @@ function sendNotification(title, body){
 
   setTimeout(() => {
     deleteNotif(tag)
-  }, 5000);
+  }, 10000);
 };
 
 function deleteNotif(tag = 'simple-notification'){
@@ -878,7 +880,7 @@ function pnl(){
 
   $(document).on('input', ".resizingInp", function(){
     resizeInput(this);
-});
+  });
 
   document.addEventListener("visibilitychange", async () => {
     if(document.visibilityState === 'hidden'){

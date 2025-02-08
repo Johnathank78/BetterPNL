@@ -27,7 +27,10 @@ function bottomNotification(from, target = "", queued=false){
         return;
     };
 
-    $('.bottomNotification_Icon').css("transform", "unset");
+    $('.bottomNotification_Icon').css({
+        "transform": "unset",
+        "display": "block"
+    });
 
     if(["connected", "fetched"].includes(from)){
         $('.bottomNotification_Icon').css('filter', greenFilter);
@@ -42,7 +45,7 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "fetched"){
             $(".bottomNotification_msg").text("Data successfully fetched");
         };
-    }else if(["fetchError", "deleteUser"].includes(from)){
+    }else if(["fetchError", "deleteUser", "retry"].includes(from)){
         $('.bottomNotification_Icon').css('filter', redFilter);
         $(".bottomNotification_msg").css('color', redText);
         $('.bottomNotification').css("backgroundColor", redBG);
@@ -53,7 +56,9 @@ function bottomNotification(from, target = "", queued=false){
             $('.bottomNotification_Icon').css("transform", "rotate(45deg)");
         }else if(from == "deleteUser"){
             $(".bottomNotification_Icon").attr('src', binIMG);
-        };
+        }else if(from == "retry"){
+            $('.bottomNotification_Icon').css("display", "none");
+        }
 
         $(".bottomNotification_Icon").css('scale', "1.1");
 
@@ -61,6 +66,8 @@ function bottomNotification(from, target = "", queued=false){
             $(".bottomNotification_msg").text("Error while fetching data : " + target);
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
+        }else if(from == "retry"){
+            $(".bottomNotification_msg").text("Error while fetching data => Retrying...");
         };
     };
 
