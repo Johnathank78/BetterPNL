@@ -21,7 +21,7 @@
       "src": "/BetterPNL/resources/imgs/smallSS.png",
       "sizes": "430x870",
       "type": "image/png",
-      "label": "Homescreen of JohnWorkout",
+      "label": "Homescreen",
       "purpose": "any"
     },
     {
@@ -29,7 +29,7 @@
       "sizes": "1905x962",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Homescreen of JohnWorkout",
+      "label": "Homescreen",
       "purpose": "any"
     }
   ]

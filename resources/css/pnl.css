@@ -277,10 +277,10 @@ body{
     gap: 20px;
 
     position: absolute;
-    bottom: 0;
+    bottom: 20px;
 
     width: calc(100% - 30px);
-    height: 87%;
+    height: 84vh;
 
     padding: 0 15px;
 
@@ -293,12 +293,13 @@ body{
 }
 
 .global_wrapper{
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 colonnes de largeur égale */
+    gap: 20px; /* Espace entre les éléments */
 
-    flex-direction: row;
-    justify-content: space-between;
+    margin-bottom: auto;
 
-    height: 13%;
+    height: 90px;
 }
 
 .global_elem{
@@ -308,7 +309,6 @@ body{
     align-items: flex-start;
     justify-content: space-between;
 
-    width: calc(48% - 30px);
     padding: 12px 15px;
     
     color: white;
@@ -330,6 +330,7 @@ body{
 }
 
 .detail_wrapper{
+    position: relative;
     display: flex;
     flex-direction: column;
 
@@ -337,14 +338,17 @@ body{
     justify-content: space-between;
 
     width: calc(100% - 30px);
-    height: calc(70% - 30px);
+    height: 100%;
+    max-height: 100%;
 
+    flex-shrink: 1;
     padding: 15px;
-
     gap: 10px;
 
     background-color: var(--medium-color);
     border-radius: 8px;
+
+    overflow: hidden;
 }
 
 .detail_header{
@@ -477,7 +481,9 @@ body{
     background-color: var(--yellow);
     font-size: 15px;
 
-    height: 6%;
+    margin-top: auto;
+
+    height: 42px;
     border-radius: 8px;
 
     cursor: pointer;
