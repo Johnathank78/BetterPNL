@@ -13,6 +13,7 @@ const blueBG = '#9acde7';
 var addIMG = false;
 var binIMG = false;
 var tickIMG = false;
+var infoIMG = false;
 
 var bottomNotificationElem = false;
 var botNotifTO = false;
@@ -45,7 +46,7 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "fetched"){
             $(".bottomNotification_msg").text("Data successfully fetched");
         };
-    }else if(["fetchError", "deleteUser", "retry"].includes(from)){
+    }else if(["fetchError", "deleteUser", "retry", "fillConnect", "notConnected", "tooShort"].includes(from)){
         $('.bottomNotification_Icon').css('filter', redFilter);
         $(".bottomNotification_msg").css('color', redText);
         $('.bottomNotification').css("backgroundColor", redBG);
@@ -56,9 +57,11 @@ function bottomNotification(from, target = "", queued=false){
             $('.bottomNotification_Icon').css("transform", "rotate(45deg)");
         }else if(from == "deleteUser"){
             $(".bottomNotification_Icon").attr('src', binIMG);
+        }else if(["fillConnect", "notConnected", "tooShort"].includes(from)){
+            $(".bottomNotification_Icon").attr('src', infoIMG);
         }else if(from == "retry"){
             $('.bottomNotification_Icon').css("display", "none");
-        }
+        };
 
         $(".bottomNotification_Icon").css('scale', "1.1");
 
@@ -67,7 +70,13 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
         }else if(from == "retry"){
-            $(".bottomNotification_msg").text("Error while fetching data => Retrying...");
+            $(".bottomNotification_msg").text("Error while fetching data => Retrying..");
+        }else if(from == "fillConnect"){
+            $(".bottomNotification_msg").text("Error : Fill all entries");
+        }else if(from == "notConnected"){
+            $(".bottomNotification_msg").text("Error : Not connected yet");
+        }else if(from == "tooShort"){
+            $(".bottomNotification_msg").text("Auto Refresh time must be >= 60s");
         };
     };
 
@@ -137,6 +146,7 @@ $(document).ready(function(){
     addIMG = $("#addIMG").attr('src');
     binIMG = $("#binIMG").attr('src');
     tickIMG = $("#tickIMG").attr('src');
+    infoIMG = $("#infoIMG").attr('src');
 
     bottomNotificationElem = document.querySelector('.bottomNotification');
 });//readyEnd

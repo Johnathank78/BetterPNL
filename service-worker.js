@@ -11,6 +11,7 @@ self.addEventListener("install", event => {
                 "BetterPNL/resources/imgs/pnl_logo.png",
                 "BetterPNL/resources/imgs/smallSS.png",
                 "BetterPNL/resources/imgs/wideSS.png",
+                "BetterPNL/resources/imgs/preview.png",
                 "BetterPNL/resources/imgs/icon.png",
                 "BetterPNL/resources/js/pnl.js",
                 "BetterPNL/resources/js/bottomNotification.js",

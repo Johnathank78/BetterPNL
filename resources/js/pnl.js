@@ -44,11 +44,25 @@ function isObfuscated(str){
   return str.length > 0 && /^[*]+$/.test(str);
 };
 
-function startTimeout(time){
-  refreshTimeout = setTimeout(() => {
-    if(!isFetching && isLogged){refreshData()};
-  }, time * 1000);
+const randomiseDelay = (delay, randomOffset, canGoLower = true) => {
+  let offset = Math.floor(Math.random() * (randomOffset + 1));
+  
+  if(canGoLower){
+    offset = Math.floor(Math.random() * (randomOffset * 2 + 1)) - randomOffset;
+  };
+
+  return Math.max(1, (delay + offset) * 1000);
 };
+
+function startTimeout(time) {
+  const adjustedTime = randomiseDelay(time, 13); // Ensure time is never negative or zero
+
+  refreshTimeout = setTimeout(() => {
+    if(!isFetching && isLogged){
+      refreshData();
+    }
+  }, adjustedTime);
+}
 
 function stopTimeout(){
   clearTimeout(refreshTimeout);
@@ -148,10 +162,48 @@ localStorage.setItem("params", JSON.stringify(data));
 return;
 };
 
+function autoRefreshSet(activated){
+  if(!activated){
+    $('.autoRefreshing').css({
+      'backgroundColor': 'var(--light-color)',
+      'color': 'white'
+    });
+
+    stopTimeout();
+  }else{
+    $('.autoRefreshing').css({
+      'backgroundColor': 'var(--yellow)',
+      'color': 'black'
+    });
+
+    startTimeout(params['refreshTime']);
+  };
+};
+
 // DATA FETCH 
 
+const wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
+
+const fetchWithRetry = (url, options = {}, tries = 2) => {
+  return fetch("url", options).then((response) => {
+      if (response.ok) {
+        return response;
+      } else {
+        return Promise.reject(response);
+      }
+    }).catch((error) => {
+      if (tries < 1) {
+        return { ok: false, status: error.status || "Unknown" }
+      } else {
+        bottomNotification('retry');
+
+        const delay = randomiseDelay(6, 2, false);
+        return wait(delay).then(() => fetchWithRetry(url, options, tries - 1));
+      }
+    });
+};
+
 async function signHmacSha256(queryString, secret){
-  // Using SubtleCrypto
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const msgData = encoder.encode(queryString);
@@ -179,7 +231,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
     queryString: queryString
   };
 
-  const response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
+  const response = await fetchWithRetry("https://betterpnl-api.onrender.com/proxySigned", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -187,7 +239,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
 
   if (!response.ok) {
     bottomNotification('fetchError', response.status);
-    clearData(false);
+    clearData();
 
     throw new Error("Proxy error: " + response.status);
   }else if(firstLog && isLogged){
@@ -245,6 +297,40 @@ async function getUserData(){
 };
 
 // DATA PROCESSING
+
+function filterWalletData(data){
+  const mode = params['filter']['var'];  // "Name" | "PNL" | "Amount" (example)
+  const way = params['filter']['way'];   // "ASC" | "DESC"
+  
+  data.coins.sort((a, b) => {
+    switch (mode) {
+      case "Name": {
+        // Sort by asset name (string comparison)
+        return a.asset.localeCompare(b.asset);
+      }
+      case "PNL": {
+        // ongoing_pnl might be "+10" or "10" or "-50", so parseFloat is safe
+        const pnlA = parseFloat(a.ongoing_pnl);
+        const pnlB = parseFloat(b.ongoing_pnl);
+        return pnlA - pnlB;
+      }
+      case "Amount": {
+        const amtA = parseFloat(a.amount);
+        const amtB = parseFloat(b.amount);
+        return amtA - amtB;
+      }
+      default:
+        return 0;
+    }
+  });
+
+  // If the user wants descending order, just reverse
+  if (way === "Desc") {
+    data.coins.reverse();
+  }
+
+  return data; 
+};
 
 function computeAveragePrice(trades){
   // Sort by time ascending
@@ -389,128 +475,13 @@ async function fetchAndComputePortfolio(apiKey, apiSecret){
   return result;
 };
 
-// GENERATE n DISPLAY
-
-function fetchStyleUpdate(fetching, refresh=false){
-  if(fetching){
-    $('.detail_connect').remove();
-    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').text('');
-    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
-
-    if(!refresh){
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div><div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
-    };
-
-    $('.refresh').css('opacity', '.3');
-  }else{
-    $('.refresh').css('opacity', '1');
-    $('.skeleton').removeClass('skeleton');
-  }
-};
-
-function updateGlobalElements(bank, pnl){
-    const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
-    $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
-    $('.global_elem.pnl .elem_data').html(pnl + ' <span class="currency">$</span>');
-
-    $('.pnl_data').css('color', pnlColor)
-};
-
-function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean_buy, ongoing_pnl) {
-    // Convert the PnL to a number
-    const pnlNumber = parseFloat(ongoing_pnl);
-
-    // Determine the sign and color based on the PnL value
-    const sign = pnlNumber >= 0 ? '+' : '-';
-    const formattedPnl = sign + Math.abs(pnlNumber);
-    const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
-
-    // Build the HTML using a template literal
-    const tileHtml = `
-        <div class="detail_elem">
-            <div class="detail_elem_header">
-                <span class="detail_elem_title">
-                    ${asset}
-                    <span class="detail_elem_amount">${amount}</span>
-                </span>
-                <span class="detail_elem_price">${price} $</span>
-            </div>
-            <div class="detail_elem_body">
-                <div class="detail_subElem">
-                    <span class="detail_subElem_title">ACTUAL VALUE</span>
-                    <span class="detail_subElem_data actual_value">${actual_value} $</span>
-                </div>
-                <div class="detail_subElem">
-                    <span class="detail_subElem_title">MEAN BUY</span>
-                    <span class="detail_subElem_data mean_buy">${mean_buy} $</span>
-                </div>
-                <div class="detail_subElem">
-                    <span class="detail_subElem_title">BUY VALUE</span>
-                    <span class="detail_subElem_data buy_value">${buy_value} $</span>
-                </div>
-                <div class="detail_subElem">
-                    <span class="detail_subElem_title">ONGOING PNL</span>
-                    <span class="detail_subElem_data pnl_data" style="color: ${pnlColor};">${formattedPnl} $</span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Append the generated tile to the container with class ".detail_elem_wrapper"
-    $('.detail_elem_wrapper').append(tileHtml);
-};
-
-function filterWalletData(data){
-  const mode = params['filter']['var'];  // "Name" | "PNL" | "Amount" (example)
-  const way = params['filter']['way'];   // "ASC" | "DESC"
-  
-  data.coins.sort((a, b) => {
-    switch (mode) {
-      case "Name": {
-        // Sort by asset name (string comparison)
-        return a.asset.localeCompare(b.asset);
-      }
-      case "PNL": {
-        // ongoing_pnl might be "+10" or "10" or "-50", so parseFloat is safe
-        const pnlA = parseFloat(a.ongoing_pnl);
-        const pnlB = parseFloat(b.ongoing_pnl);
-        return pnlA - pnlB;
-      }
-      case "Amount": {
-        const amtA = parseFloat(a.amount);
-        const amtB = parseFloat(b.amount);
-        return amtA - amtB;
-      }
-      default:
-        return 0;
-    }
-  });
-
-  // If the user wants descending order, just reverse
-  if (way === "Desc") {
-    data.coins.reverse();
-  }
-
-  return data; 
-};
-
-function displayNewData(walletData){
-  $('.detail_elem_wrapper').children().remove();
-
-  if(API['API'] == "noData" || walletData == false){return};
-
-  updateGlobalElements(walletData.global.bank, walletData.global.pnl);
-  filterWalletData(walletData).coins.forEach(function(coin) {
-    if(coin.asset != 'USDC'){
-      generateAndPushTile(coin.asset, coin.amount, coin.price, coin.actual_value, coin.buy_value, coin.mean_buy, coin.ongoing_pnl);
-    };
-  });
-};
+//  DISPLAY DATA
 
 async function getDataAndDisplay(refresh=false) {
   if(isLogged){
-    fetchStyleUpdate(true, refresh);
+    if(params['autoRefresh']){stopTimeout()};
 
+    fetchStyleUpdate(true, refresh);
     walletData = await getUserData();
 
     oldWalletData = cloneOBJ(walletData);
@@ -525,14 +496,130 @@ async function getDataAndDisplay(refresh=false) {
   };
 };
 
+function displayNewData(walletData){
+  $('.detail_elem_wrapper').children().not('.detail_connect').remove();
+
+  if(API['API'] == "noData" || walletData == false){return};
+
+  updateGlobalElements(walletData.global.bank, walletData.global.pnl);
+  filterWalletData(walletData).coins.forEach(function(coin) {
+    if(coin.asset != 'USDC'){
+      generateAndPushTile(coin.asset, coin.amount, coin.price, coin.actual_value, coin.buy_value, coin.mean_buy, coin.ongoing_pnl);
+    };
+  });
+};
+
 async function refreshData(filter=false){
   if(filter){
       displayNewData(walletData)
   }else{
-      stopTimeout();
       getDataAndDisplay(true);
   };
+};
 
+// ----
+
+function updateGlobalElements(bank, pnl){
+  const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
+  $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
+  $('.global_elem.pnl .elem_data').html(pnl + ' <span class="currency">$</span>');
+
+  $('.pnl_data').css('color', pnlColor)
+};
+
+function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean_buy, ongoing_pnl) {
+  // Convert the PnL to a number
+  const pnlNumber = parseFloat(ongoing_pnl);
+
+  // Determine the sign and color based on the PnL value
+  const sign = pnlNumber >= 0 ? '+' : '-';
+  const formattedPnl = sign + Math.abs(pnlNumber);
+  const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
+
+  // Build the HTML using a template literal
+  const tileHtml = `
+      <div class="detail_elem">
+          <div class="detail_elem_header">
+              <span class="detail_elem_title">
+                  ${asset}
+                  <span class="detail_elem_amount">${amount}</span>
+              </span>
+              <span class="detail_elem_price">${price} $</span>
+          </div>
+          <div class="detail_elem_body">
+              <div class="detail_subElem">
+                  <span class="detail_subElem_title">ACTUAL VALUE</span>
+                  <span class="detail_subElem_data actual_value">${actual_value} $</span>
+              </div>
+              <div class="detail_subElem">
+                  <span class="detail_subElem_title">MEAN BUY</span>
+                  <span class="detail_subElem_data mean_buy">${mean_buy} $</span>
+              </div>
+              <div class="detail_subElem">
+                  <span class="detail_subElem_title">BUY VALUE</span>
+                  <span class="detail_subElem_data buy_value">${buy_value} $</span>
+              </div>
+              <div class="detail_subElem">
+                  <span class="detail_subElem_title">ONGOING PNL</span>
+                  <span class="detail_subElem_data pnl_data" style="color: ${pnlColor};">${formattedPnl} $</span>
+              </div>
+          </div>
+      </div>
+  `;
+
+  // Append the generated tile to the container with class ".detail_elem_wrapper"
+  $('.detail_elem_wrapper').append(tileHtml);
+};
+
+function disconnect(){
+  params['autoRefresh'] = false;
+  autoRefreshSet(false);
+
+  API = {
+    "API": "noData",
+    "SECRET": "noData"
+  };
+  
+  api_delete();
+  params_save(params);
+  bottomNotification("deleteUser");
+
+  isLogged = false;
+
+  $('#api_key-val').val("");
+  $('#api_secret-val').val("");
+  $('.detail_connect').text("CONNECT TO API");
+};
+
+function clearData(){
+  $('.detail_elem_wrapper').children().not('.detail_connect').remove();
+  $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
+  $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
+  $('.pnl_data').css('color', 'var(--gray)');
+
+  $('.detail_connect').text("FETCH RETRY");
+  $('.detail_connect').css('display', 'flex');
+
+  initDOMupdate(false);
+};
+
+// GRAPHIC UPDATE
+
+function fetchStyleUpdate(fetching, refresh=false){
+  if(fetching){
+    $('.detail_connect').css('display', 'none');
+    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').text('');
+    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
+
+    if(!refresh){
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div><div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+    };
+
+    $('.refresh').css('opacity', '.3');
+  }else{
+    $('.refresh').css('opacity', '1');
+    $('.skeleton').removeClass('skeleton');
+  }
 };
 
 function initDOMupdate(connected){
@@ -550,40 +637,13 @@ function initDOMupdate(connected){
 
   if(connected){
     $('.elem_data').addClass('skeleton');
-    $('.detail_connect').remove();
+    $('.detail_connect').css('display', 'none');
     fetchStyleUpdate(true);
   }else{
     fetchStyleUpdate(false);
-    $('.detail_elem_wrapper').append('<span class="detail_connect">CONNECT TO API</span>');
+    $('.detail_connect').css('display', 'flex');
     $('.refresh').css('opacity', '.3');
   };
-};
-
-function clearData(disconnect=true){
-  $('.detail_elem_wrapper').children().remove();
-  $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
-  $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
-  $('.pnl_data').css('color', 'var(--gray)');
-
-  if(disconnect){
-    $('#api_key-val').val("");
-    $('#api_secret-val').val("");
-
-    API = {
-      "API": "noData",
-      "SECRET": "noData"
-    };
-    
-    bottomNotification("deleteUser");
-    api_delete();
-    isLogged = false;
-
-    $('.detail_connect').text("CONNECT TO API");
-  }else{
-    $('.detail_connect').text("RETRY");
-  };
-
-  initDOMupdate(false);
 };
 
 // NAVIGATION
@@ -689,9 +749,9 @@ function isApop(walletData, oldWalletData){
   const percentageChange = ((currentPNL - oldPNL) / Math.abs(oldPNL)) * 100;
 
   if (percentageChange >= 4.5) {
-    showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+Math.abs(percentageChange).toFixed(2).toString()+"% | +"+ Math.abs(difference).toString()+"$"});
+    showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+Math.abs(percentageChange).toFixed(2).toString()+"% | +"+ Math.abs(difference).toFixed(2).toString()+"$"});
   } else if (percentageChange <= -3.5) {
-    showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+Math.abs(percentageChange).toFixed(2).toString()+"% | -"+ Math.abs(difference).toString()+"$"});
+    showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+Math.abs(percentageChange).toFixed(2).toString()+"% | -"+ Math.abs(difference).toFixed(2).toString()+"$"});
   };
 
   return;
@@ -788,8 +848,12 @@ function pnl(){
   });
 
   $(document).on('click', '.detail_connect', function(){
-    if($(this).text() == "RETRY"){
-      refreshData();
+    if($(this).text() == "FETCH RETRY"){
+      if(walletData){
+        refreshData();
+      }else{
+        getDataAndDisplay(false);
+      };
     }else{
       openConnect();
     };
@@ -832,34 +896,25 @@ function pnl(){
             closeConnect();
             getDataAndDisplay();
           };
-      };
+      }else{
+        bottomNotification('fillConnect');
+      }
   });
 
   $('.connect_disconnect').on('click', function(){
     if(isLogged){
       clearData();
+      disconnect();
       closeConnect();
+      
       firstLog = true;
+    }else{
+      bottomNotification('notConnected');
     };
   });
 
   $('.autoRefreshing').on('click', function(){
-    if(params['autoRefresh']){
-      $('.autoRefreshing').css({
-        'backgroundColor': 'var(--light-color)',
-        'color': 'white'
-      });
-
-      stopTimeout();
-    }else{
-      $('.autoRefreshing').css({
-        'backgroundColor': 'var(--yellow)',
-        'color': 'black'
-      });
-
-      startTimeout(params['refreshTime']);
-    };
-
+    autoRefreshSet(!params['autoRefresh']);
     params['autoRefresh'] = !params['autoRefresh'];
     params_save(params);
   });
@@ -869,12 +924,17 @@ function pnl(){
   });
 
   $('.refreshTiming').on('change', function(){
-    params['refreshTime'] = parseInt($(this).val());
-    params_save(params);
-
-    if(params['autoRefresh']){
-      stopTimeout();
-      startTimeout(params['refreshTime']);
+    if(parseInt($(this).val()) < 60){
+      $(this).val(params['refreshTime']);
+      bottomNotification('tooShort');
+    }else{
+      params['refreshTime'] = parseInt($(this).val());
+      params_save(params);
+  
+      if(params['autoRefresh']){
+        stopTimeout();
+        startTimeout(params['refreshTime']);
+      };
     };
   });
 
@@ -886,9 +946,7 @@ function pnl(){
     if(document.visibilityState === 'hidden'){
       if(params['autoRefresh']){stopTimeout()};
     }else if(document.visibilityState === 'visible'){
-      if(!isFetching && isLogged){
-        refreshData();
-      };
+      if(params['autoRefresh']){startTimeout(params['refreshTime'])};
     };
   });
 
@@ -921,10 +979,11 @@ function pnl(){
 
   if(isLogged){
     firstLog = false;
+
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
 
-    initDOMupdate(true);
+    autoRefreshSet(params['autoRefresh']);
     getDataAndDisplay(false);
   }else{
     initDOMupdate(false);
