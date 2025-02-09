@@ -70,11 +70,11 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
         }else if(from == "retry"){
-            $(".bottomNotification_msg").text("Error while fetching data => Retrying..");
+            $(".bottomNotification_msg").text("Timout Exceeded => Retrying..");
         }else if(from == "fillConnect"){
-            $(".bottomNotification_msg").text("Error : Fill all entries");
+            $(".bottomNotification_msg").text("Fill all entries");
         }else if(from == "notConnected"){
-            $(".bottomNotification_msg").text("Error : Not connected yet");
+            $(".bottomNotification_msg").text("Not connected yet");
         }else if(from == "tooShort"){
             $(".bottomNotification_msg").text("Auto Refresh time must be >= 60s");
         };

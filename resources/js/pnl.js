@@ -44,20 +44,24 @@ function isObfuscated(str){
   return str.length > 0 && /^[*]+$/.test(str);
 };
 
-const randomiseDelay = (delay, randomOffset, canGoLower = true) => {
-  let offset = Math.floor(Math.random() * (randomOffset + 1));
+function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
+
+  let offset;
+  let randomAmount = Math.max(2, Math.floor(delay * randomOffsetPercentage));
   
   if(canGoLower){
-    offset = Math.floor(Math.random() * (randomOffset * 2 + 1)) - randomOffset;
+    offset = Math.floor(Math.random() * (randomAmount * 2 + 1)) - randomAmount;
+  }else{
+    offset = Math.floor(Math.random() * (randomAmount + 1));
   };
 
-  console.log(Math.max(1, (delay + offset) * 1000))
-    
+  console.log(Math.max(1, (delay + offset) * 1000));
+
   return Math.max(1, (delay + offset) * 1000);
 };
 
 function startTimeout(time) {
-  const adjustedTime = randomiseDelay(time, 13); // Ensure time is never negative or zero
+  const adjustedTime = randomiseDelay(time, 0.15)
 
   refreshTimeout = setTimeout(() => {
     if(!isFetching && isLogged){
@@ -186,25 +190,6 @@ function autoRefreshSet(activated){
 
 const wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
 
-const fetchWithRetry = (url, options = {}, tries = 2) => {
-  return fetch(url, options).then((response) => {
-      if (response.ok) {
-        return response;
-      } else {
-        return Promise.reject(response);
-      }
-    }).catch((error) => {
-      if (tries < 1) {
-        return { ok: false, status: error.status || "Unknown" }
-      } else {
-        bottomNotification('retry');
-
-        const delay = randomiseDelay(6, 2, false);
-        return wait(delay).then(() => fetchWithRetry(url, options, tries - 1));
-      }
-    });
-};
-
 async function signHmacSha256(queryString, secret){
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -233,7 +218,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
     queryString: queryString
   };
 
-  const response = await fetchWithRetry("https://betterpnl-api.onrender.com/proxySigned", {
+  const response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)

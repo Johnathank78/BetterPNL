@@ -277,10 +277,10 @@ body{
     gap: 20px;
 
     position: absolute;
-    bottom: 20px;
+    bottom: 40px;
 
     width: calc(100% - 30px);
-    height: 84vh;
+    height: 82vh;
 
     padding: 0 15px;
 
@@ -310,6 +310,7 @@ body{
     justify-content: space-between;
 
     padding: 12px 15px;
+    height: 66px;
     
     color: white;
     background-color: var(--medium-color);
