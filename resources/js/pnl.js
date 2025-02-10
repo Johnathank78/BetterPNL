@@ -527,22 +527,22 @@ function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean
           <div class="detail_elem_header">
               <span class="detail_elem_title">
                   ${asset}
-                  <span class="detail_elem_amount">${amount.toFixed(6)}</span>
+                  <span class="detail_elem_amount">${parseFloat(amount).toFixed(8)}</span>
               </span>
-              <span class="detail_elem_price">${price.toFixed(2)} $</span>
+              <span class="detail_elem_price">${parseFloat(price).toFixed(2)} $</span>
           </div>
           <div class="detail_elem_body">
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value">${actual_value.toFixed(2)} $</span>
+                  <span class="detail_subElem_data actual_value">${parseFloat(actual_value).toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${mean_buy.toFixed(2)} $</span>
+                  <span class="detail_subElem_data mean_buy">${parseFloat(mean_buy).toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value">${buy_value.toFixed(2)} $</span>
+                  <span class="detail_subElem_data buy_value">${parseFloat(buy_value).toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ONGOING PNL</span>
