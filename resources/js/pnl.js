@@ -302,8 +302,8 @@ function filterWalletData(data){
         return pnlA - pnlB;
       }
       case "Amount": {
-        const amtA = parseFloat(a.amount);
-        const amtB = parseFloat(b.amount);
+        const amtA = parseFloat(a.actual_value);
+        const amtB = parseFloat(b.actual_value);
         return amtA - amtB;
       }
       default:
@@ -476,10 +476,8 @@ async function getDataAndDisplay(refresh=false) {
 
     if(params['autoRefresh']){startTimeout(params['refreshTime'])};
 
-    if(isLogged){
-      displayNewData(walletData);
-      fetchStyleUpdate(false);
-    };
+    displayNewData(walletData);
+    fetchStyleUpdate(false);
   };
 };
 
@@ -529,22 +527,22 @@ function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean
           <div class="detail_elem_header">
               <span class="detail_elem_title">
                   ${asset}
-                  <span class="detail_elem_amount">${amount}</span>
+                  <span class="detail_elem_amount">${amount.toFixed(6)}</span>
               </span>
-              <span class="detail_elem_price">${price} $</span>
+              <span class="detail_elem_price">${price.toFixed(2)} $</span>
           </div>
           <div class="detail_elem_body">
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value">${actual_value} $</span>
+                  <span class="detail_subElem_data actual_value">${actual_value.toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${mean_buy} $</span>
+                  <span class="detail_subElem_data mean_buy">${mean_buy.toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value">${buy_value} $</span>
+                  <span class="detail_subElem_data buy_value">${buy_value.toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ONGOING PNL</span>
@@ -838,11 +836,7 @@ function pnl(){
 
   $(document).on('click', '.detail_connect', function(){
     if($(this).text() == "FETCH RETRY"){
-      if(walletData){
-        refreshData();
-      }else{
-        getDataAndDisplay(false);
-      };
+      getDataAndDisplay(false);
     }else{
       openConnect();
     };
