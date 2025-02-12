@@ -190,34 +190,18 @@ function autoRefreshSet(activated){
 
 const wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
 
-async function signHmacSha256(queryString, secret){
+async function signHmacSha256(queryString, secret) {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const msgData = encoder.encode(queryString);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
   const signatureBytes = new Uint8Array(signatureBuffer);
-  const signatureHex = Array.from(signatureBytes)
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-  return signatureHex;
-};
+  return Array.from(signatureBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
-async function callBinanceProxy(apiKey, endpoint, queryString){
-  const payload = {
-    apiKey: apiKey,
-    endpoint: endpoint,
-    queryString: queryString
-  };
-
+async function callBinanceProxy(apiKey, endpoint, queryString) {
+  const payload = { apiKey, endpoint, queryString };
   const response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -225,41 +209,76 @@ async function callBinanceProxy(apiKey, endpoint, queryString){
   });
 
   if (!response.ok) {
-    bottomNotification('fetchError', response.status);
+    bottomNotification("fetchError", response.status);
     clearData();
-
     throw new Error("Proxy error: " + response.status);
-  }else if(firstLog && isLogged){
+  } else if (firstLog && isLogged) {
     firstLog = false;
     bottomNotification("connected");
   };
 
   const data = await response.json();
-  if (data.error) {
-    throw new Error(data.error);
-  }
+  if (data.error) throw new Error(data.error);
   return data;
-};
+}
 
-async function getAccountInfo(apiKey, apiSecret){
+async function getAccountInfo_PROCESSING(apiKey, apiSecret) {
   const timestamp = Date.now();
-
   let queryString = `timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
-
   return callBinanceProxy(apiKey, "/api/v3/account", queryString);
-};
+}
 
-async function getMyTrades(apiKey, apiSecret, symbol){
+async function getMyTrades_PROCESSING(apiKey, apiSecret, symbol) {
   const timestamp = Date.now();
-
   let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
-
   return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
-};
+}
+
+async function fetchWithTimeout(promise, timeout) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), timeout))
+  ]);
+}
+
+async function retryRequest(fn, retries = 3, timeout = 5000, retryDelay = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await fetchWithTimeout(fn(), timeout);
+      return result;
+    } catch (error) {
+      if (error.message !== "Request timed out") {
+        bottomNotification("fetchError", error.status || "Unknown");
+        clearData();
+
+        throw error;
+      };
+
+      if (attempt === retries) {
+        bottomNotification("fetchError", error.status || "Unknown");
+        clearData();
+        
+        throw error;
+      } else {
+        bottomNotification("retry");
+        await wait(retryDelay);
+      };
+    };
+  };
+  throw new Error("Failed after maximum retries");
+}
+
+function getAccountInfo(apiKey, apiSecret) {
+  return retryRequest(() => getAccountInfo_PROCESSING(apiKey, apiSecret));
+}
+
+function getMyTrades(apiKey, apiSecret, symbol) {
+  return retryRequest(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol));
+}
 
 async function getSymbolPrice(symbol){
   // Let's try direct fetch (public endpoint).
