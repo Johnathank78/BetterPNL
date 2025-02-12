@@ -40,6 +40,12 @@ var longClickTS = false;
 
 // UTILITY
 
+function showBlurPage(className){
+  $(".blurBG").children(':not(.'+className+')').css('display', 'none');
+  $('.'+className+'').css("display", 'flex');
+  $(".blurBG").css("display", "flex");
+};
+
 function isObfuscated(str){
   return str.length > 0 && /^[*]+$/.test(str);
 };
@@ -273,11 +279,11 @@ async function retryRequest(fn, retries = 3, timeout = 5000, retryDelay = 1000) 
 }
 
 function getAccountInfo(apiKey, apiSecret) {
-  return retryRequest(() => getAccountInfo_PROCESSING(apiKey, apiSecret));
+  return retryRequest(() => getAccountInfo_PROCESSING(apiKey, apiSecret), 1, 5000, 1000);
 }
 
 function getMyTrades(apiKey, apiSecret, symbol) {
-  return retryRequest(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol));
+  return retryRequest(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol), 1, 5000, 1000);
 }
 
 async function getSymbolPrice(symbol){
@@ -671,7 +677,7 @@ function openConnect(){
     $('#api_secret-val').val("");
   };
 
-  $('.blurBG').css('display', 'flex');
+  showBlurPage('connect_wrapper');
   current_page = 'connect'
 };
 
@@ -952,6 +958,14 @@ function pnl(){
     };
   });
 
+  $(".simulatorSelector_opt").on('click', function(){
+    if($(this).text() == "SELL"){
+      $('.simulatorSelectorHighlight').animate({ left: "0" }, 250);
+    }else{
+      $('.simulatorSelectorHighlight').animate({ left: "50%" }, 250);
+    };
+  });
+
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
 
@@ -984,7 +998,7 @@ function pnl(){
 
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
-
+    
     autoRefreshSet(params['autoRefresh']);
     getDataAndDisplay(false);
   }else{

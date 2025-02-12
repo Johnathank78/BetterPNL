@@ -105,25 +105,54 @@
         <div speed="750" alert="false" class="autoRefreshing longClickable">AUTO FETCH</div>
 
         <div class="blurBG">
-            <div class="connect_wrapper">
+            <div class="blurItem_wrapper connect_wrapper">
                 <span class="connect_mainText noselect">CONNECT TO API</span>
                 <input type="tel" class="refreshTiming resizingInp" placeholder="60" value="120">
                 
                 <div class="connectBody_wrapper">
-                    <div class="connect_element key">
-                        <span class="connect_element_text noselect">API KEY</span>
-                        <input type="text" class="connect_element_input" placeholder="API Key" id="api_key-val">
+                    <div class="blurItem_element key">
+                        <span class="blurItem_element_text noselect">API KEY</span>
+                        <input type="text" class="blurItem_element_input" placeholder="API Key" id="api_key-val">
                     </div>
 
-                    <div class="connect_element secret">
-                        <span class="connect_element_text noselect">API SECRET</span>
-                        <input type="text" class="connect_element_input" placeholder="API Secret" id="api_secret-val">
+                    <div class="blurItem_element secret">
+                        <span class="blurItem_element_text noselect">API SECRET</span>
+                        <input type="text" class="blurItem_element_input" placeholder="API Secret" id="api_secret-val">
                     </div>
                 </div>
 
                 <div class="connect_bottomLine">
                     <div class="connect_submit">CONNECT</div>
                     <div class="connect_disconnect"><img src="./resources/imgs/bin.svg" alt=""></div>
+                </div>
+            </div>
+
+            <div class="blurItem_wrapper simulator_wrapper">
+                <div class="simulator_firstLine">
+                    <span class="simulator_mainText noselect">SIMULATOR</span>
+                    <div class="simulatorSelector_wrapper">
+                        <div class="simulatorSelectorHighlight"></div>
+                        <span class="simulatorSelector_opt profitForSale">SELL</span>
+                        <span class="simulatorSelector_opt SaleForProfit">PROFIT</span>
+                    </div>
+                </div>
+
+                <div class="simulator_secondLine">
+                    <select name="coinSelector" id="coin_selecotr">
+                        <option value="SOL">SOL</option>
+                        <option value="SOL">ETH</option>
+                        <option value="SOL">TAO</option>
+                    </select>
+
+                    <div class="blurItem_element key">
+                        <span class="blurItem_element_text noselect">SELL PRICE</span>
+                        <input type="text" class="blurItem_element_input" placeholder="1800$" id="api_key-val">
+                    </div>
+
+                    <div class="blurItem_element key">
+                        <span class="blurItem_element_text noselect">AIMED PROFIT</span>
+                        <input type="text" class="blurItem_element_input" placeholder="50$" id="api_key-val">
+                    </div>
                 </div>
             </div>
         </div>
@@ -146,6 +175,7 @@
                     <span class="elem_title">DETAILS</span>
 
                     <div class="detail_select_wrapper">
+
                         <select name="detail_select" class="detail_select" id="sortingVar">
                             <option value="Name" selected>Name</option>
                             <option value="Amount">Amount</option>
@@ -153,8 +183,8 @@
                         </select>
 
                         <select name="detail_select" class="detail_select" id="sortingWay">
-                            <option value="Asc" selected>Asc</option>
-                            <option value="Desc">Desc</option>
+                            <option value="Asc" selected>ASC</option>
+                            <option value="Desc">DESC</option>
                         </select>
                     </div>
                 </div>
@@ -163,7 +193,11 @@
                     <span class="detail_connect">CONNECT TO API</span>
                 </div>
             </div>
-            <div class="refresh">REFRESH DATA</div>
+
+            <div class="refresh_container">
+                <span class="refresh">REFRESH DATA</span>
+                <span class="simulator" style="display: none;">$</span>
+            </div>
         </div>
 
     </div>

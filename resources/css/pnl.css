@@ -111,7 +111,7 @@ body{
     display: none;
 }
 
-.connect_wrapper{
+.blurItem_wrapper{
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -123,6 +123,85 @@ body{
 
     background-color: var(--medium-color);
     border-radius: 12px;
+
+    display: none;
+}
+
+.simulator_firstLine{
+    display: flex;
+    flex-direction: row;
+
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.simulator_secondLine{
+    display: flex;
+    flex-direction: column;
+
+    gap: 15px;
+
+    width: 100%;
+}
+
+.simulatorSelector_wrapper{
+    position: relative;
+    display: flex;
+    flex-direction: row;
+
+    background-color: var(--light-color);
+
+    height: 35px;
+    width: 180px;
+
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.simulatorSelector_opt{
+    display: flex;
+
+    justify-content: center;
+    align-items: center;
+
+    height: 100%;
+    width: 50%;
+
+    font-size: 15px;
+}
+
+.simulatorSelectorHighlight{
+    position: absolute;
+    background-color: var(--superLight-color);
+
+    height: 100%;
+    width: 50%;
+    
+    top: 0;
+    left: 0;
+
+    border-radius: 8px;
+}
+
+#coin_selecotr{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-color: var(--light-color);
+
+    padding: 6px;
+    height: 40px;
+    
+    color: white;
+    
+    font-weight: 500;
+    font-size: 16px;
+
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
 }
 
 .pnl_data{
@@ -160,7 +239,7 @@ body{
     gap: 18px;
 }
 
-.connect_element{
+.blurItem_element{
     display: flex;
     flex-direction: column;
 
@@ -169,7 +248,7 @@ body{
     gap: 10px;
 }
 
-.connect_element_text{
+.blurItem_element_text{
     font-size: 16px;
 }
 
@@ -200,7 +279,7 @@ body{
     scrollbar-width: none;  /* Firefox */
 }
 
-.connect_element_input{
+.blurItem_element_input{
     background-color: var(--light-color);
     border-radius: 8px;
     
@@ -220,10 +299,9 @@ body{
     scrollbar-width: none;  /* Firefox */
 }
 
-.connect_element_input::-webkit-scrollbar{
+.blurItem_element_input::-webkit-scrollbar{
     display: none;
 }
-
 
 .logo{
     position: absolute;
@@ -365,6 +443,8 @@ body{
 .detail_select_wrapper{
     display: flex;
     flex-direction: row;
+
+    align-items: center;
     gap: 10px;
 }
 
@@ -472,8 +552,34 @@ body{
     opacity: .6;
 }
 
+.refresh_container{
+    display: flex;
+
+    align-items: center;
+
+    height: 42px;
+    width: 100%;
+
+    gap: 20px;
+    margin-top: auto;
+}
+
+.simulator{
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    height: 100%;
+    aspect-ratio: 1;
+
+    background-color: var(--light-color);
+    border-radius: 8px;
+}
+
 .refresh{
     display: flex;
+    flex-grow: 1;
 
     align-items: center;
     justify-content: center;
@@ -482,9 +588,7 @@ body{
     background-color: var(--yellow);
     font-size: 15px;
 
-    margin-top: auto;
-
-    height: 42px;
+    height: 100%;
     border-radius: 8px;
 
     cursor: pointer;
