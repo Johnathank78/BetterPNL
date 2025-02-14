@@ -110,12 +110,12 @@
                 <input type="tel" class="refreshTiming resizingInp" placeholder="60" value="120">
                 
                 <div class="connectBody_wrapper">
-                    <div class="blurItem_element key">
+                    <div class="blurItem_element_col key">
                         <span class="blurItem_element_text noselect">API KEY</span>
                         <input type="text" class="blurItem_element_input" placeholder="API Key" id="api_key-val" autocomplete="username" required>
                     </div>
 
-                    <div class="blurItem_element secret">
+                    <div class="blurItem_element_col secret">
                         <span class="blurItem_element_text noselect">API SECRET</span>
                         <input type="text" class="blurItem_element_input" placeholder="API Secret" id="api_secret-val" autocomplete="current-password" required>
                     </div>
@@ -130,30 +130,27 @@
             <div class="blurItem_wrapper simulator_wrapper">
                 <div class="simulator_firstLine">
                     <span class="simulator_mainText noselect">SIMULATOR</span>
-                    <div class="simulatorSelector_wrapper">
-                        <div class="simulatorSelectorHighlight"></div>
-                        <span class="simulatorSelector_opt profitForSale">SELL</span>
-                        <span class="simulatorSelector_opt SaleForProfit">PROFIT</span>
-                    </div>
                 </div>
 
                 <div class="simulator_secondLine">
-                    <select name="coinSelector" id="coin_selecotr">
-                        <option value="SOL">SOL</option>
-                        <option value="SOL">ETH</option>
-                        <option value="SOL">TAO</option>
-                    </select>
+                    <select name="coinSelector" id="coin_selector"></select>
+                </div>
 
-                    <div class="blurItem_element key">
+                <div class="simulator_thirdLine">
+                    <div class="blurItem_element_row key">
                         <span class="blurItem_element_text noselect">SELL PRICE</span>
-                        <input type="text" class="blurItem_element_input" placeholder="1800$" id="api_key-val">
+                        <input type="tel" class="blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
+                        <span class="dollaSignPlaceholder">$</span>
                     </div>
 
-                    <div class="blurItem_element key">
-                        <span class="blurItem_element_text noselect">AIMED PROFIT</span>
-                        <input type="text" class="blurItem_element_input" placeholder="50$" id="api_key-val">
+                    <div class="blurItem_element_row key">
+                        <span class="blurItem_element_text noselect">PROFIT</span>
+                        <input type="tel" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="aimedProfit">
+                        <span class="dollaSignPlaceholder">$</span>
                     </div>
                 </div>
+
+                <span class="simulator_masterInfo">MEAN BUY : <span class="simulator_meanBuy"></span> | BUY QUANTITY : <span class="simulator_buyQuant"></span></span>
             </div>
         </div>
 
@@ -177,8 +174,8 @@
                     <div class="detail_select_wrapper">
 
                         <select name="detail_select" class="detail_select" id="sortingVar">
-                            <option value="Name" selected>Name</option>
-                            <option value="Amount">Amount</option>
+                            <option value="Name" selected>NAME</option>
+                            <option value="Amount">AMOUNT</option>
                             <option value="PNL">PNL</option>
                         </select>
 
@@ -195,8 +192,8 @@
             </div>
 
             <div class="refresh_container">
+                <span class="simulator">SIMULATE</span>
                 <span class="refresh">REFRESH DATA</span>
-                <span class="simulator" style="display: none;">$</span>
             </div>
         </div>
 
