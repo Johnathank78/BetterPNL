@@ -109,15 +109,15 @@
                 <span class="connect_mainText noselect">CONNECT TO API</span>
                 <input type="tel" class="refreshTiming resizingInp" placeholder="60" value="120">
                 
-                <form class="connectBody_wrapper" method="post">
+                <form class="connectBody_wrapper" method="post" action="#">
                     <div class="blurItem_element_col key">
                         <label for="api_key-val" class="blurItem_element_text noselect">API KEY</label>
-                        <input type="text" class="blurItem_element_input" placeholder="API Key" id="api_key-val" autocomplete="username" required>
+                        <input type="text" class="blurItem_element_input" placeholder="API Key" id="api_key-val" name="username" autocomplete="username" required>
                     </div>
 
                     <div class="blurItem_element_col secret">
                         <label for="api_secret-val" class="blurItem_element_text noselect">API SECRET</label>
-                        <input type="text" class="blurItem_element_input" placeholder="API Secret" id="api_secret-val" autocomplete="current-password" required>
+                        <input type="password" class="blurItem_element_input" placeholder="API Secret" id="api_secret-val" name="password" autocomplete="current-password" required>
                     </div>
 
                     <div class="connect_bottomLine">
