@@ -116,12 +116,13 @@ body{
     flex-direction: column;
     align-items: flex-start;
 
-    gap: 18px;
+    gap: 20px;
 
     width: calc(80% - 30px);
     padding: 15px;
 
     background-color: var(--medium-color);
+    color: white;
     border-radius: 12px;
 
     display: none;
@@ -145,46 +146,15 @@ body{
     width: 100%;
 }
 
-.simulatorSelector_wrapper{
-    position: relative;
-    display: flex;
-    flex-direction: row;
+.simulator_thirdLine{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 colonnes de largeur égale */
+    gap: 20px; /* Espace entre les éléments */
 
-    background-color: var(--light-color);
-
-    height: 35px;
-    width: 180px;
-
-    border-radius: 8px;
-    cursor: pointer;
+    width: 100%;
 }
 
-.simulatorSelector_opt{
-    display: flex;
-
-    justify-content: center;
-    align-items: center;
-
-    height: 100%;
-    width: 50%;
-
-    font-size: 15px;
-}
-
-.simulatorSelectorHighlight{
-    position: absolute;
-    background-color: var(--superLight-color);
-
-    height: 100%;
-    width: 50%;
-    
-    top: 0;
-    left: 0;
-
-    border-radius: 8px;
-}
-
-#coin_selecotr{
+#coin_selector{
     display: flex;
     align-items: center;
     justify-content: center;
@@ -224,6 +194,7 @@ body{
 
     font-size: 14px;
     background-color: var(--superLight-color);
+    color: white;
     border-radius: 7px;
 
     cursor: pointer;
@@ -239,7 +210,20 @@ body{
     gap: 18px;
 }
 
-.blurItem_element{
+.blurItem_element_col{
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+
+    align-items: flex-start;
+    width: 100%;
+    gap: 10px;
+}
+
+.blurItem_element_row{
+    position: relative;
+
     display: flex;
     flex-direction: column;
 
@@ -249,7 +233,9 @@ body{
 }
 
 .blurItem_element_text{
+    text-wrap: nowrap;
     font-size: 16px;
+    overflow: hidden;
 }
 
 .refreshTiming{
@@ -271,12 +257,25 @@ body{
     text-align: center;
 
     overflow-x: scroll;
+    color: white;
 
     outline: none;
     border: none;
 
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
+}
+
+.dollaSignPlaceholder{
+    position: absolute;
+    font-size: 24px;
+
+    bottom: 12px;
+    right: 10px;
+
+    color: var(--gray);
+
+    pointer-events: none;
 }
 
 .blurItem_element_input{
@@ -289,6 +288,7 @@ body{
     height: 20px;
 
     font-size: 16px;
+    color: white;
 
     overflow-x: scroll;
 
@@ -301,6 +301,14 @@ body{
 
 .blurItem_element_input::-webkit-scrollbar{
     display: none;
+}
+
+.blurItem_element_input_wide{
+    font-size: 24px;
+    
+    padding: 6px 37px 6px 10px;
+    width: calc(100% - 47px);
+    height: 45px;
 }
 
 .logo{
@@ -339,6 +347,8 @@ body{
 
     right: 65px;
     top: 20px;
+
+    color: white;
 
     cursor: pointer;
 }
@@ -398,6 +408,7 @@ body{
 .elem_title{
     font-size: 16px;
     opacity: .75;
+    color: white;
 }
 
 .elem_data{
@@ -478,6 +489,8 @@ body{
 
     width: 100%;
     height: 90%;
+
+    color: white;
 
     overflow-y: scroll;
 
@@ -571,10 +584,25 @@ body{
     justify-content: center;
 
     height: 100%;
-    aspect-ratio: 1;
+    padding: 0px 10px;
+
+    font-size: 16px;
+    color: white;
 
     background-color: var(--light-color);
     border-radius: 8px;
+
+    cursor: pointer;
+}
+
+.simulator_masterInfo{
+    font-size: 12px;
+    color: var(--gray);
+}
+
+.simulator_meanBuy, .simulator_buyQuant{
+    color: inherit;
+    font-size: inherit;
 }
 
 .refresh{
