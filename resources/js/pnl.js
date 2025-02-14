@@ -34,11 +34,35 @@ var isFetching = false;
 var isLogged = false;
 var firstLog = true;
 
+var focusedCoin = false;
+
 var haveWebNotificationsBeenAccepted = false;
 var refreshTimeout = null;
 var longClickTS = false;
 
 // UTILITY
+
+function loadSimulatorData(){
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+    
+  $('.simulator_meanBuy').text(coin.mean_buy + "$");
+  $('.simulator_buyQuant').text(coin.buy_value + "$");
+
+  $('#sellPrice').attr('placeholder', parseInt(parseFloat(coin.mean_buy) * 1.05));
+  $('#aimedProfit').attr('placeholder', parseInt(parseFloat(coin.buy_value) * 0.05));
+};
+
+function getObjectKeyIndex(obj, key, val){
+  for (let ind = 0; ind < obj.length; ind++) {
+    const el = obj[ind];
+
+    if(el[key] == val){
+      return ind;
+    };
+  };
+
+  return -1
+};
 
 function showBlurPage(className){
   $(".blurBG").children(':not(.'+className+')').css('display', 'none');
@@ -208,17 +232,26 @@ async function signHmacSha256(queryString, secret) {
 
 async function callBinanceProxy(apiKey, endpoint, queryString) {
   const payload = { apiKey, endpoint, queryString };
-  const response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  var response = false;
 
-  if (!response.ok) {
-    bottomNotification("fetchError", response.status);
+  try {
+    response = await fetchWithTimeout("https://betterpnl-api.onrender.com/proxySigned", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if(error.message = 'Fetch timeout'){
+      bottomNotification("timeout");
+    }else{
+      bottomNotification("fetchError", response.status);
+    };
+
     clearData();
     throw new Error("Proxy error: " + response.status);
-  } else if (firstLog && isLogged) {
+  };
+  
+  if(firstLog && isLogged) {
     firstLog = false;
     bottomNotification("connected");
   };
@@ -228,7 +261,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString) {
   return data;
 }
 
-async function getAccountInfo_PROCESSING(apiKey, apiSecret) {
+async function getAccountInfo(apiKey, apiSecret) {
   const timestamp = Date.now();
   let queryString = `timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
@@ -236,7 +269,7 @@ async function getAccountInfo_PROCESSING(apiKey, apiSecret) {
   return callBinanceProxy(apiKey, "/api/v3/account", queryString);
 }
 
-async function getMyTrades_PROCESSING(apiKey, apiSecret, symbol) {
+async function getMyTrades(apiKey, apiSecret, symbol) {
   const timestamp = Date.now();
   let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
@@ -244,47 +277,13 @@ async function getMyTrades_PROCESSING(apiKey, apiSecret, symbol) {
   return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
 }
 
-async function fetchWithTimeout(promise, timeout) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), timeout))
-  ]);
-}
+const fetchWithTimeout = async (url, options, timeout = 5000) => {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Fetch timeout')), timeout)
+  );
 
-async function retryRequest(fn, retries = 3, timeout = 5000, retryDelay = 1000) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const result = await fetchWithTimeout(fn(), timeout);
-      return result;
-    } catch (error) {
-      if (error.message !== "Request timed out") {
-        bottomNotification("fetchError", error.status || "Unknown");
-        clearData();
-
-        throw error;
-      };
-
-      if (attempt === retries) {
-        bottomNotification("fetchError", error.status || "Unknown");
-        clearData();
-        
-        throw error;
-      } else {
-        bottomNotification("retry");
-        await wait(retryDelay);
-      };
-    };
-  };
-  throw new Error("Failed after maximum retries");
-}
-
-function getAccountInfo(apiKey, apiSecret) {
-  return fetchWithTimeout(() => getAccountInfo_PROCESSING(apiKey, apiSecret), 7500);
-}
-
-function getMyTrades(apiKey, apiSecret, symbol) {
-  return fetchWithTimeout(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol), 7500);
-}
+  return Promise.race([fetch(url, options), timeoutPromise]);
+};
 
 async function getSymbolPrice(symbol){
   // Let's try direct fetch (public endpoint).
@@ -627,9 +626,9 @@ function fetchStyleUpdate(fetching, refresh=false){
       $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
     };
 
-    $('.refresh').css('opacity', '.3');
+    $('.refresh_container').css('opacity', '.3');
   }else{
-    $('.refresh').css('opacity', '1');
+    $('.refresh_container').css('opacity', '1');
     $('.skeleton').removeClass('skeleton');
   };
 };
@@ -654,17 +653,40 @@ function initDOMupdate(connected){
   }else{
     fetchStyleUpdate(false);
     $('.detail_connect').css('display', 'flex');
-    $('.refresh').css('opacity', '.3');
+    $('.refresh_container').css('opacity', '.3');
   };
+};
+
+function simulatorStyleUpdate(){
+  let sell = parseFloat($('#sellPrice').val());;
+  let profit = parseFloat($('#aimedProfit').val());
+  let color = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--gray)'
+
+  if(isNaN(sell)){
+    $('#sellPrice').parent().find('.dollaSignPlaceholder').css('color', 'var(--gray)');
+  }else{
+    $('#sellPrice').parent().find('.dollaSignPlaceholder').css('color', 'white');
+  };
+
+  if($('#aimedProfit').val() == "-"){
+    color = 'var(--red)';
+  }else if($('#aimedProfit').val() == "+"){
+    color = 'var(--green)';
+  };
+
+  $('#aimedProfit').parent().find('.dollaSignPlaceholder').css('color', color);
+  $('#aimedProfit').css('color', color);
 };
 
 // NAVIGATION
 
 function goBack(){
     if(current_page == "app"){
-        return
+      return
     }else if(current_page == "connect"){
-        closeConnect();
+      closeBlurPage();
+    }else if(current_page == "simulator"){
+      closeBlurPage();
     };
 };
 
@@ -681,7 +703,7 @@ function openConnect(){
   current_page = 'connect'
 };
 
-function closeConnect(){
+function closeBlurPage(){
   $('.blurBG').css('display', 'none');
   current_page = 'app'
 };
@@ -773,8 +795,6 @@ function isApop(walletData, oldWalletData){
 // HANDLER FUNCTION 
 
 function backerMousedownHandler(e){
-  if(current_page == "selection" && !add_state && !timeInputShown && !rotation_state && !statOpened && !calendarState && !isExtraOut){return};
-  
   const clientX = (e.type === "mousedown")
   ? e.clientX
   : e.originalEvent.touches[0].clientX;
@@ -883,7 +903,7 @@ function pnl(){
 
   $('.blurBG').on('click', function(e){
       if(!$(e.target).is(this)){return}
-      closeConnect();
+      closeBlurPage();
   });
   
   $('.connect_submit').on('click', function(e){
@@ -898,10 +918,10 @@ function pnl(){
             isLogged = true;
             api_save(API);
             
-            closeConnect();
+            closeBlurPage();
             getDataAndDisplay();
           }else{
-            closeConnect();
+            closeBlurPage();
             getDataAndDisplay();
           };
       }else{
@@ -913,7 +933,7 @@ function pnl(){
     if(isLogged){
       clearData();
       disconnect();
-      closeConnect();
+      closeBlurPage();
       
       firstLog = true;
     }else{
@@ -958,14 +978,61 @@ function pnl(){
     };
   });
 
-  $(".simulatorSelector_opt").on('click', function(){
-    if($(this).text() == "SELL"){
-      $('.simulatorSelectorHighlight').animate({ left: "0" }, 250);
-    }else{
-      $('.simulatorSelectorHighlight').animate({ left: "50%" }, 250);
+  $('.simulator').on('click', function(){
+    if(!isFetching && isLogged){
+      current_page = "simulator";
+  
+      $("#coin_selector").children().remove();
+      for (const coin of walletData.coins) {
+        $("#coin_selector").append($('<option value="'+coin.asset+'">'+coin.asset+'</option>'));
+      };
+  
+      focusedCoin = focusedCoin ? focusedCoin : walletData.coins[0].asset
+      loadSimulatorData();
+
+      showBlurPage('simulator_wrapper');
     };
   });
 
+  $('#coin_selector').on('change', function(){
+      focusedCoin = $(this).val();
+      loadSimulatorData();
+  });
+  
+  $('#sellPrice').on('input', function(){
+    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+    let sellPrice = parseFloat($(this).val());
+    let buyPrice = parseFloat(coin.mean_buy);
+    let amount = parseFloat(coin.buy_value);
+    
+    let profit = (((sellPrice - buyPrice) / buyPrice) * amount).toFixed(2);
+
+    if(isNaN(profit)){
+      $('#aimedProfit').val("");
+    }else{
+      $('#aimedProfit').val(profit);
+    };
+  });
+
+  $('#aimedProfit').on('input', function(){
+    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+    let profit = parseFloat($(this).val());
+    let buyPrice = parseFloat(coin.mean_buy);
+    let amount = parseFloat(coin.amount);
+    
+    let sellPrice = ((amount * buyPrice + profit) / amount).toFixed(2);;
+
+    if(isNaN(profit)){
+      $('#sellPrice').val("");
+    }else{
+      $('#sellPrice').val(sellPrice);
+    };
+  });
+
+  $('#aimedProfit, #sellPrice').on('input change', simulatorStyleUpdate);
+    
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
 
@@ -999,8 +1066,12 @@ function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    autoRefreshSet(params['autoRefresh']);
-    getDataAndDisplay(false);
+    // autoRefreshSet(params['autoRefresh']);
+    // getDataAndDisplay(false);
+
+    walletData = JSON.parse('{"global":{"bank":"2463.10","pnl":"-309.16"},"coins":[{"asset":"SOL","amount":"6.03552004","price":"200.13","actual_value":"1207.89","buy_value":"1489.65","mean_buy":"246.81","ongoing_pnl":"-281.77"},{"asset":"TAO","amount":"0.6808854999999999","price":"396.40","actual_value":"269.90","buy_value":"299.74","mean_buy":"440.22","ongoing_pnl":"-29.83"},{"asset":"ETH","amount":"0.36386611","price":"2707.90","actual_value":"985.31","buy_value":"982.87","mean_buy":"2701.19","ongoing_pnl":"+2.44"}]}');
+    
+    displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };
