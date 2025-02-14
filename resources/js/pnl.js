@@ -42,16 +42,6 @@ var longClickTS = false;
 
 // UTILITY
 
-function loadSimulatorData(){
-  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-    
-  $('.simulator_meanBuy').text(coin.mean_buy + "$");
-  $('.simulator_buyQuant').text(coin.buy_value + "$");
-
-  $('#sellPrice').attr('placeholder', parseInt(parseFloat(coin.mean_buy) * 1.05));
-  $('#aimedProfit').attr('placeholder', parseInt(parseFloat(coin.buy_value) * 0.05));
-};
-
 function getObjectKeyIndex(obj, key, val){
   for (let ind = 0; ind < obj.length; ind++) {
     const el = obj[ind];
@@ -705,6 +695,9 @@ function openConnect(){
 
 function closeBlurPage(){
   $('.blurBG').css('display', 'none');
+  $('#sellPrice, #aimedProfit').val('');
+  simulatorStyleUpdate();
+
   current_page = 'app'
 };
 
@@ -869,6 +862,51 @@ function backerMouseupHandler(){
     };
 };
 
+// SIMULATOR
+
+function loadSimulatorData(){
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+    
+  $('.simulator_buyQuant').text(coin.buy_value + "$");
+  $('.simulator_meanBuy').text(coin.mean_buy + "$");
+  $('#coin_selector').val(focusedCoin);
+  
+  $('#sellPrice').attr('placeholder', parseInt(parseFloat(coin.mean_buy) * 1.05));
+  $('#aimedProfit').attr('placeholder', parseInt(parseFloat(coin.buy_value) * 0.05));
+};
+
+function aimedProfitUpdate(sellPrice){
+  sellPrice = parseFloat(sellPrice);
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+  let buyPrice = parseFloat(coin.mean_buy);
+  let amount = parseFloat(coin.buy_value);
+  
+  let profit = (((sellPrice - buyPrice) / buyPrice) * amount).toFixed(2);
+
+  if(isNaN(profit)){
+    $('#aimedProfit').val("");
+  }else{
+    $('#aimedProfit').val(profit);
+  };
+};
+
+function sellPriceUpdate(profit){
+  profit = parseFloat(profit);
+  
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+  let buyPrice = parseFloat(coin.mean_buy);
+  let amount = parseFloat(coin.amount);
+  
+  let sellPrice = ((amount * buyPrice + profit) / amount).toFixed(2);;
+  
+  if(isNaN(profit)){
+    $('#sellPrice').val("");
+  }else{
+    $('#sellPrice').val(sellPrice);
+  };
+};
+
 // -------
 
 function pnl(){
@@ -906,27 +944,29 @@ function pnl(){
       closeBlurPage();
   });
   
-  $('.connect_submit').on('click', function(e){
-      let api = $('#api_key-val').val();
-      let secret = $('#api_secret-val').val();
+  $('.connectBody_wrapper').on('submit', function(e){
+    e.preventDefault();
 
-      if(api != "" && secret != ""){
-          if(!isObfuscated(api)){
-            API["API"] = api;
-            API["SECRET"] = secret
-  
-            isLogged = true;
-            api_save(API);
-            
-            closeBlurPage();
-            getDataAndDisplay();
-          }else{
-            closeBlurPage();
-            getDataAndDisplay();
-          };
-      }else{
-        bottomNotification('fillConnect');
-      }
+    let api = $('#api_key-val').val();
+    let secret = $('#api_secret-val').val();
+
+    if(api != "" && secret != ""){
+        if(!isObfuscated(api)){
+          API["API"] = api;
+          API["SECRET"] = secret
+
+          isLogged = true;
+          api_save(API);
+          
+          closeBlurPage();
+          getDataAndDisplay();
+        }else{
+          closeBlurPage();
+          getDataAndDisplay();
+        };
+    }else{
+      bottomNotification('fillConnect');
+    }
   });
 
   $('.connect_disconnect').on('click', function(){
@@ -981,7 +1021,7 @@ function pnl(){
   $('.simulator').on('click', function(){
     if(!isFetching && isLogged){
       current_page = "simulator";
-  
+      
       $("#coin_selector").children().remove();
       for (const coin of walletData.coins) {
         $("#coin_selector").append($('<option value="'+coin.asset+'">'+coin.asset+'</option>'));
@@ -995,44 +1035,16 @@ function pnl(){
   });
 
   $('#coin_selector').on('change', function(){
-      focusedCoin = $(this).val();
-      loadSimulatorData();
-  });
-  
-  $('#sellPrice').on('input', function(){
-    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+    focusedCoin = $(this).val();
 
-    let sellPrice = parseFloat($(this).val());
-    let buyPrice = parseFloat(coin.mean_buy);
-    let amount = parseFloat(coin.buy_value);
-    
-    let profit = (((sellPrice - buyPrice) / buyPrice) * amount).toFixed(2);
-
-    if(isNaN(profit)){
-      $('#aimedProfit').val("");
-    }else{
-      $('#aimedProfit').val(profit);
-    };
+    sellPriceUpdate($('#aimedProfit').val());
+    loadSimulatorData();
   });
 
-  $('#aimedProfit').on('input', function(){
-    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-
-    let profit = parseFloat($(this).val());
-    let buyPrice = parseFloat(coin.mean_buy);
-    let amount = parseFloat(coin.amount);
-    
-    let sellPrice = ((amount * buyPrice + profit) / amount).toFixed(2);;
-
-    if(isNaN(profit)){
-      $('#sellPrice').val("");
-    }else{
-      $('#sellPrice').val(sellPrice);
-    };
-  });
-
+  $('#sellPrice').on('input', function(){aimedProfitUpdate($(this).val())});
+  $('#aimedProfit').on('input', function(){sellPriceUpdate($(this).val())});
   $('#aimedProfit, #sellPrice').on('input change', simulatorStyleUpdate);
-    
+  
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
 
@@ -1066,12 +1078,8 @@ function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    // autoRefreshSet(params['autoRefresh']);
-    // getDataAndDisplay(false);
-
-    walletData = JSON.parse('{"global":{"bank":"2463.10","pnl":"-309.16"},"coins":[{"asset":"SOL","amount":"6.03552004","price":"200.13","actual_value":"1207.89","buy_value":"1489.65","mean_buy":"246.81","ongoing_pnl":"-281.77"},{"asset":"TAO","amount":"0.6808854999999999","price":"396.40","actual_value":"269.90","buy_value":"299.74","mean_buy":"440.22","ongoing_pnl":"-29.83"},{"asset":"ETH","amount":"0.36386611","price":"2707.90","actual_value":"985.31","buy_value":"982.87","mean_buy":"2701.19","ongoing_pnl":"+2.44"}]}');
-    
-    displayNewData(walletData);
+    autoRefreshSet(params['autoRefresh']);
+    getDataAndDisplay(false);
   }else{
     initDOMupdate(false);
   };
