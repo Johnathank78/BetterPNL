@@ -279,11 +279,11 @@ async function retryRequest(fn, retries = 3, timeout = 5000, retryDelay = 1000) 
 }
 
 function getAccountInfo(apiKey, apiSecret) {
-  return retryRequest(() => getAccountInfo_PROCESSING(apiKey, apiSecret), 1, 7500, 1000);
+  return fetchWithTimeout(() => getAccountInfo_PROCESSING(apiKey, apiSecret), 7500);
 }
 
 function getMyTrades(apiKey, apiSecret, symbol) {
-  return retryRequest(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol), 1, 7500, 1000);
+  return fetchWithTimeout(() => getMyTrades_PROCESSING(apiKey, apiSecret, symbol), 7500);
 }
 
 async function getSymbolPrice(symbol){
