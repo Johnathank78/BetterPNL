@@ -303,6 +303,10 @@ body{
     display: none;
 }
 
+#api_secret-val{
+    font-size: 12px;
+}
+
 .blurItem_element_input_wide{
     font-size: 20px;
     
