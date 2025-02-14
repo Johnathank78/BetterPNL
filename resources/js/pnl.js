@@ -225,7 +225,7 @@ async function callBinanceProxy(apiKey, endpoint, queryString) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
-    });
+    }, 8500);
   } catch (error) {
     if(error.message = 'Fetch timeout'){
       bottomNotification("timeout");
