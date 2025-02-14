@@ -46,7 +46,7 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "fetched"){
             $(".bottomNotification_msg").text("Data successfully fetched");
         };
-    }else if(["fetchError", "deleteUser", "retry", "fillConnect", "notConnected", "tooShort"].includes(from)){
+    }else if(["fetchError", "deleteUser", "timeout", "fillConnect", "notConnected", "tooShort"].includes(from)){
         $('.bottomNotification_Icon').css('filter', redFilter);
         $(".bottomNotification_msg").css('color', redText);
         $('.bottomNotification').css("backgroundColor", redBG);
@@ -59,7 +59,7 @@ function bottomNotification(from, target = "", queued=false){
             $(".bottomNotification_Icon").attr('src', binIMG);
         }else if(["fillConnect", "notConnected", "tooShort"].includes(from)){
             $(".bottomNotification_Icon").attr('src', infoIMG);
-        }else if(from == "retry"){
+        }else if(from == "timeout"){
             $('.bottomNotification_Icon').css("display", "none");
         };
 
@@ -69,8 +69,8 @@ function bottomNotification(from, target = "", queued=false){
             $(".bottomNotification_msg").text("Error while fetching data : " + target);
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
-        }else if(from == "retry"){
-            $(".bottomNotification_msg").text("Timout Exceeded => Retrying..");
+        }else if(from == "timeout"){
+            $(".bottomNotification_msg").text("Timeout error");
         }else if(from == "fillConnect"){
             $(".bottomNotification_msg").text("Fill all entries");
         }else if(from == "notConnected"){
