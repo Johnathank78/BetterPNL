@@ -109,22 +109,23 @@
                 <span class="connect_mainText noselect">CONNECT TO API</span>
                 <input type="tel" class="refreshTiming resizingInp" placeholder="60" value="120">
                 
-                <div class="connectBody_wrapper">
+                <form class="connectBody_wrapper" method="post">
                     <div class="blurItem_element_col key">
-                        <span class="blurItem_element_text noselect">API KEY</span>
+                        <label for="api_key-val" class="blurItem_element_text noselect">API KEY</label>
                         <input type="text" class="blurItem_element_input" placeholder="API Key" id="api_key-val" autocomplete="username" required>
                     </div>
 
                     <div class="blurItem_element_col secret">
-                        <span class="blurItem_element_text noselect">API SECRET</span>
+                        <label for="api_secret-val" class="blurItem_element_text noselect">API SECRET</label>
                         <input type="text" class="blurItem_element_input" placeholder="API Secret" id="api_secret-val" autocomplete="current-password" required>
                     </div>
-                </div>
 
-                <div class="connect_bottomLine">
-                    <div class="connect_submit">CONNECT</div>
-                    <div class="connect_disconnect"><img src="./resources/imgs/bin.svg" alt=""></div>
-                </div>
+                    <div class="connect_bottomLine">
+                        <button class="connect_submit" type="submit">CONNECT</button>
+                        <div class="connect_disconnect"><img src="./resources/imgs/bin.svg" alt=""></div>
+                    </div>
+                </form>
+
             </div>
 
             <div class="blurItem_wrapper simulator_wrapper">
@@ -139,13 +140,13 @@
                 <div class="simulator_thirdLine">
                     <div class="blurItem_element_row key">
                         <span class="blurItem_element_text noselect">SELL PRICE</span>
-                        <input type="tel" class="blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
+                        <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
                         <span class="dollaSignPlaceholder">$</span>
                     </div>
 
                     <div class="blurItem_element_row key">
                         <span class="blurItem_element_text noselect">PROFIT</span>
-                        <input type="tel" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="aimedProfit">
+                        <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="aimedProfit">
                         <span class="dollaSignPlaceholder">$</span>
                     </div>
                 </div>
