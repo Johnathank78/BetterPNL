@@ -60,10 +60,6 @@ function showBlurPage(className){
   $(".blurBG").css("display", "flex");
 };
 
-function isObfuscated(str){
-  return str.length > 0 && /^[*]+$/.test(str);
-};
-
 function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
 
   let offset;
@@ -682,8 +678,8 @@ function goBack(){
 
 function openConnect(){
   if(isLogged){
-    $('#api_key-val').val("*******************************");
-    $('#api_secret-val').val("*******************************");
+    $('#api_key-val').val(API['API']);
+    $('#api_secret-val').val(API['SECRET']);
   }else{
     $('#api_key-val').val("");
     $('#api_secret-val').val("");
@@ -951,7 +947,7 @@ function pnl(){
     let secret = $('#api_secret-val').val();
 
     if(api != "" && secret != ""){
-        if(!isObfuscated(api)){
+        if(!(api == API['API'] && secret == API['SECRET'])){
           API["API"] = api;
           API["SECRET"] = secret
 
@@ -966,7 +962,7 @@ function pnl(){
         };
     }else{
       bottomNotification('fillConnect');
-    }
+    };
   });
 
   $('.connect_disconnect').on('click', function(){
