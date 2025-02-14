@@ -215,8 +215,8 @@ body{
 
     display: flex;
     flex-direction: column;
-
     align-items: flex-start;
+
     width: 100%;
     gap: 10px;
 }
@@ -268,9 +268,9 @@ body{
 
 .dollaSignPlaceholder{
     position: absolute;
-    font-size: 24px;
+    font-size: 20px;
 
-    bottom: 12px;
+    bottom: 16px;
     right: 10px;
 
     color: var(--gray);
@@ -304,10 +304,10 @@ body{
 }
 
 .blurItem_element_input_wide{
-    font-size: 24px;
+    font-size: 20px;
     
-    padding: 6px 37px 6px 10px;
-    width: calc(100% - 47px);
+    padding: 6px 33px 6px 10px;
+    width: calc(100% - 43px);
     height: 45px;
 }
 
@@ -664,8 +664,9 @@ body{
 
     color: black;
     background-color: var(--yellow);
-    font-size: 15px;
 
+    font-weight: 100;
+    font-size: 15px;
 
     border-radius: 6px;
 
