@@ -328,6 +328,17 @@ body{
     pointer-events: none;
 }
 
+#putMaxInvest, #currentPrice{
+    position: absolute;
+    font-size: 12px;
+
+    top: 2px;
+    right: 2px;
+
+    color: var(--yellow);
+    cursor: pointer;
+}
+
 .blurItem_element_input{
     background-color: var(--light-color);
     border-radius: 8px;

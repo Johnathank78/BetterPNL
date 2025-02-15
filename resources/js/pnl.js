@@ -410,12 +410,23 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     if (stableCoins.hasOwnProperty(asset.toUpperCase())){
       const stableCoin = stableCoins[asset.toUpperCase()];
 
-      if(stableCoin.conversionRate !== null){
+      if(stableCoin.label == "USDC"){
+        result.coins.push({
+          asset: asset,
+          amount: quantity
+        });
+        
         totalBalanceCurrent += quantity / stableCoin.conversionRate;
       }else{
         try{
           const tickerData = await getSymbolPrice("USDC" + stableCoin.label);
           stableCoin.conversionRate = parseFloat(tickerData.price);
+          
+          result.coins.push({
+            asset: asset,
+            amount: quantity
+          });
+
           totalBalanceCurrent += quantity / stableCoin.conversionRate;
         }catch (e){
           continue;
@@ -522,7 +533,9 @@ function displayNewData(walletData){
 
   updateGlobalElements(walletData.global.bank, walletData.global.pnl);
   filterWalletData(walletData).coins.forEach(function(coin) {
-    generateAndPushTile(coin);
+    if(!stableCoins.hasOwnProperty(coin.asset.toUpperCase())){
+      generateAndPushTile(coin);
+    };
   });
 };
 
@@ -978,6 +991,12 @@ function simulatorStyleUpdate(){
 
 // --- BUY --- //
 
+function findAvailableFunds(quoteCurrency){
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", quoteCurrency)];
+
+  return coin.amount;
+};
+
 function priceUpdate(mean_buy, quantity) {
   if(isNacN(mean_buy) || isNacN(quantity)){return ""};
 
@@ -1126,10 +1145,12 @@ async function pnl(){
       
       $("#coin_selector").children().remove();
       for (const coin of walletData.coins) {
-        $("#coin_selector").append($('<option value="'+coin.asset+'">'+coin.asset+'</option>'));
+        if(!stableCoins.hasOwnProperty(coin.asset.toUpperCase())){
+          $("#coin_selector").append($('<option value="'+coin.asset+'">'+coin.asset+'</option>'));
+        };
       };
   
-      focusedCoin = focusedCoin ? focusedCoin : walletData.coins[0].asset
+      focusedCoin = focusedCoin ? focusedCoin : walletData.coins.find(coin => !stableCoins.hasOwnProperty(coin.asset))?.asset;
       loadSimulatorData(current_simulator_mode);
 
       showBlurPage('simulator_wrapper');
@@ -1177,13 +1198,13 @@ async function pnl(){
 
   // BUY
 
-  $('#buyPrice').on('input', function(){
+  $('#buyPrice').on('input change', function(){
     if($('#buyQuantity').val() == ""){return};
     $('#meanBuy').val(meanBuyUpdate($(this).val(), $('#buyQuantity').val()));
     $('#meanBuy').change();
   });
   
-  $('#buyQuantity').on('input', function(){
+  $('#buyQuantity').on('input change', function(){
     if($('#buyPrice').val() == ""){return};
     $('#meanBuy').val(meanBuyUpdate($('#buyPrice').val(), $(this).val()));
     $('#meanBuy').change();
@@ -1192,6 +1213,21 @@ async function pnl(){
   $('#meanBuy').on('input', function(){
     if($('#buyQuantity').val() == ""){return};
     $('#buyPrice').val(priceUpdate($(this).val(), $('#buyQuantity').val()));
+    $('#buyPrice').change();
+  });
+
+  $('#putMaxInvest').on('click', function(){
+    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+    let funds = findAvailableFunds(coin.quoteCurrency).toFixed(2);
+
+    $('#buyQuantity').val(funds);
+    $('#buyQuantity').change();
+  });
+
+  $('#currentPrice').on('click', function(){
+    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+    $('#buyPrice').val(coin.price);
     $('#buyPrice').change();
   });
   
@@ -1247,6 +1283,9 @@ async function pnl(){
     
     autoRefreshSet(params['autoRefresh']);
     getDataAndDisplay(false);
+
+    // walletData = oldWalletData;
+    // displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };
