@@ -25,6 +25,8 @@ var backerY = 0;
 var backerX = 0;
 
 var current_page = "app";
+var current_simulator_mode = "sell";
+
 var walletData = false;
 var oldWalletData = false;
 
@@ -59,6 +61,15 @@ const stableCoins = {
 };
 
 // UTILITY
+
+function isNacN(input) {
+  if (typeof input === 'number') {
+      input = input.toString();
+  } else if (typeof input !== 'string') {
+      return true;
+  }
+  return !/^-?\d*\.?\d+$/.test(input);
+}
 
 function getObjectKeyIndex(obj, key, val){
   for (let ind = 0; ind < obj.length; ind++) {
@@ -427,7 +438,6 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
         symbolFound = symbolCandidate;
         detectedStable = stable;
 
-        console.log("Found trades for", symbolFound);
         break;
       } catch (e) {
         continue;
@@ -657,27 +667,6 @@ function initDOMupdate(connected){
   };
 };
 
-function simulatorStyleUpdate(){
-  let sell = parseFloat($('#sellPrice').val());;
-  let profit = parseFloat($('#aimedProfit').val());
-  let color = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--gray)'
-
-  if(isNaN(sell)){
-    $('#sellPrice').parent().find('.dollaSignPlaceholder').css('color', 'var(--gray)');
-  }else{
-    $('#sellPrice').parent().find('.dollaSignPlaceholder').css('color', 'white');
-  };
-
-  if($('#aimedProfit').val() == "-"){
-    color = 'var(--red)';
-  }else if($('#aimedProfit').val() == "+"){
-    color = 'var(--green)';
-  };
-
-  $('#aimedProfit').parent().find('.dollaSignPlaceholder').css('color', color);
-  $('#aimedProfit').css('color', color);
-};
-
 // NAVIGATION
 
 function goBack(){
@@ -705,9 +694,9 @@ function openConnect(){
 
 function closeBlurPage(){
   $('.blurBG').css('display', 'none');
-  $('#sellPrice, #aimedProfit').val('');
-  simulatorStyleUpdate();
+  $('#sellPrice, #aimedProfit, #buyQuantity, #buyPrice, #meanBuy').val('');
 
+  simulatorStyleUpdate();
   current_page = 'app'
 };
 
@@ -777,7 +766,7 @@ function isApop(walletData, oldWalletData){
   const currentPNL = parseFloat(walletData.global.pnl);
   const oldPNL = parseFloat(oldWalletData.global.pnl); // Ensure oldPNL is a number
 
-  if(isNaN(currentPNL) || isNaN(oldPNL)){
+  if(isNacN(currentPNL) || isNacN(oldPNL)){
     console.error("Invalid PNL values.");
     return;
   };
@@ -874,50 +863,150 @@ function backerMouseupHandler(){
 
 // SIMULATOR
 
-function loadSimulatorData(){
+function loadSimulatorData(mode){
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-  let short = stableCoins[coin.quoteCurrency].short;
+  let stableCoin = stableCoins[coin.quoteCurrency];
+  let short = stableCoin.short;
     
   $('.simulator_meanBuy').text(coin.mean_buy + short);
-  $('.simulator_buyQuant').text(coin.buy_value + "$");
+
+  if(mode == "buy"){
+    $('.simulator_buyQuant').text(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate) + short);
+  }else if(mode == "sell"){
+    $('.simulator_buyQuant').text(coin.buy_value + "$");
+  };
   
-  $('.dollaSignPlaceholder').eq(0).text(short);
+  $('.currencyPlaceholder').text(short);
   $('#coin_selector').val(focusedCoin);
   
-  $('#sellPrice').attr('placeholder', parseInt(parseFloat(coin.mean_buy) * 1.05));
-  $('#aimedProfit').attr('placeholder', parseInt(parseFloat(coin.buy_value) * 0.05));
+  let placeholderSellPrice = parseFloat(coin.mean_buy * 1.05).toFixed(2);
+
+  $('#sellPrice').attr('placeholder', placeholderSellPrice);
+  $('#aimedProfit').attr('placeholder', aimedProfitUpdate(placeholderSellPrice));
+
+  let placeholderMeanBuyPrice = parseFloat(coin.mean_buy * 0.85).toFixed(2);
+  let pastQuantity = parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate).toFixed(2);
+
+  $('#buyQuantity').attr('placeholder', pastQuantity);
+  $('#meanBuy').attr('placeholder', placeholderMeanBuyPrice);
+  $('#buyPrice').attr('placeholder', priceUpdate(placeholderMeanBuyPrice, pastQuantity));
 };
 
+function clearSelection(mode){
+  if(mode == "buy"){
+    $('#buyQuantity').val("");
+    $('#meanBuy').val("");
+    $('#buyPrice').val("");
+  }else if(mode == "sell"){
+    $('#sellPrice').val(sellPriceUpdate($('#aimedProfit').val()));
+  };
+};
+
+// --- SELL --- //
+
 function aimedProfitUpdate(sellPrice){
+  if(isNacN(sellPrice)){return ""};
+
   sellPrice = parseFloat(sellPrice);
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
 
   let buyPrice = parseFloat(coin.mean_buy);
   let amount = parseFloat(coin.buy_value);
-  
-  let profit = (((sellPrice - buyPrice) / buyPrice) * amount).toFixed(2);
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
 
-  if(isNaN(profit)){
-    $('#aimedProfit').val("");
-  }else{
-    $('#aimedProfit').val(profit);
-  };
+  let profit = ((sellPrice * conversionRate - buyPrice * conversionRate) / (buyPrice * conversionRate)) * amount;
+  return profit.toFixed(2);
 };
 
-function sellPriceUpdate(profit){
-  profit = parseFloat(profit);
+function sellPriceUpdate(profit) {
+  if(isNacN(profit)){return ""};
   
+  profit = parseFloat(profit);
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
   let buyPrice = parseFloat(coin.mean_buy);
   let amount = parseFloat(coin.amount);
-  
-  let sellPrice = ((amount * buyPrice + profit) / amount).toFixed(2);;
-  
-  if(isNaN(profit)){
-    $('#sellPrice').val("");
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
+
+  let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate);
+  return sellPrice.toFixed(2);
+};
+
+function simulatorStyleUpdate(){
+  let sell = parseFloat($('#sellPrice').val());
+  let profit = parseFloat($('#aimedProfit').val());
+
+  let quantity = parseFloat($('#buyQuantity').val());
+  let buyPrice = parseFloat($('#buyPrice').val());
+  let meanBuy = parseFloat($('#meanBuy').val());
+
+  let color = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--gray)'
+
+  if(isNacN(sell)){
+    $('#sellPrice').parent().find('.currencyPlaceholder').css('color', 'var(--gray)');
   }else{
-    $('#sellPrice').val(sellPrice);
+    $('#sellPrice').parent().find('.currencyPlaceholder').css('color', 'white');
   };
+
+  if(isNacN(quantity)){
+    $('#buyQuantity').parent().find('.currencyPlaceholder').css('color', 'var(--gray)');
+  }else{
+    $('#buyQuantity').parent().find('.currencyPlaceholder').css('color', 'white');
+  };
+
+  if(isNacN(buyPrice)){
+    $('#buyPrice').parent().find('.currencyPlaceholder').css('color', 'var(--gray)');
+  }else{
+    $('#buyPrice').parent().find('.currencyPlaceholder').css('color', 'white');
+  };
+
+  if(isNacN(meanBuy)){
+    $('#meanBuy').parent().find('.currencyPlaceholder').css('color', 'var(--gray)');
+  }else{
+    $('#meanBuy').parent().find('.currencyPlaceholder').css('color', 'white');
+  };
+
+  if($('#aimedProfit').val() == "-"){
+    color = 'var(--red)';
+  }else if($('#aimedProfit').val() == "+"){
+    color = 'var(--green)';
+  };
+
+  $('#aimedProfit').parent().find('.dollaSignPlaceholder').css('color', color);
+  $('#aimedProfit').css('color', color);
+};
+
+// --- BUY --- //
+
+function priceUpdate(mean_buy, quantity) {
+  if(isNacN(mean_buy) || isNacN(quantity)){return ""};
+
+  mean_buy = parseFloat(mean_buy);
+  quantity = parseFloat(quantity);
+
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
+
+  let pastQuantity = parseFloat(coin.buy_value) * conversionRate;
+  let pastTotalCost = pastQuantity * parseFloat(coin.mean_buy);
+
+  let newPrice = ((mean_buy * (pastQuantity + quantity)) - pastTotalCost) / quantity;
+  return newPrice.toFixed(2);
+};
+
+function meanBuyUpdate(price, quantity){
+  if(isNacN(price) || isNacN(quantity)){return ""};
+
+  price = parseFloat(price);
+  quantity = parseFloat(quantity);
+  
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
+
+  let pastQuantity = parseFloat(coin.buy_value) * conversionRate;
+
+  let meanBuy = ((pastQuantity * parseFloat(coin.mean_buy)) + (quantity * price)) / (pastQuantity + quantity);
+  return meanBuy.toFixed(2);
 };
 
 // -------
@@ -1031,6 +1120,8 @@ async function pnl(){
     };
   });
 
+  // SIMULATOR
+
   $('.simulator').on('click', function(){
     if(!isFetching && isLogged){
       current_page = "simulator";
@@ -1041,7 +1132,7 @@ async function pnl(){
       };
   
       focusedCoin = focusedCoin ? focusedCoin : walletData.coins[0].asset
-      loadSimulatorData();
+      loadSimulatorData(current_simulator_mode);
 
       showBlurPage('simulator_wrapper');
     };
@@ -1050,13 +1141,61 @@ async function pnl(){
   $('#coin_selector').on('change', function(){
     focusedCoin = $(this).val();
 
-    sellPriceUpdate($('#aimedProfit').val());
-    loadSimulatorData();
+    clearSelection(current_simulator_mode);
+    loadSimulatorData(current_simulator_mode);
   });
 
-  $('#sellPrice').on('input', function(){aimedProfitUpdate($(this).val())});
-  $('#aimedProfit').on('input', function(){sellPriceUpdate($(this).val())});
-  $('#aimedProfit, #sellPrice').on('input change', simulatorStyleUpdate);
+  $(".simulatorSelector_opt").on('click', function(){
+    if($(this).text() == "SELL"){
+      $('.simulatorSelectorHighlight').animate({ left: "0" }, 250);
+
+      $(".simulator_forthLine").css('display', 'none');
+      $(".simulator_thirdLine").css('display', 'grid');
+
+      current_simulator_mode = "sell";
+    }else{
+      $('.simulatorSelectorHighlight').animate({ left: "50%" }, 250);
+
+      $(".simulator_thirdLine").css('display', 'none');
+      $(".simulator_forthLine").css('display', 'grid');
+
+      current_simulator_mode = "buy";
+    };
+
+    loadSimulatorData(current_simulator_mode);
+  });
+
+  // SELL
+
+  $('#sellPrice').on('input', function(){
+    $('#aimedProfit').val(aimedProfitUpdate($(this).val()));
+  });
+  
+  $('#aimedProfit').on('input', function(){
+    $('#sellPrice').val(sellPriceUpdate($(this).val()));
+  });
+
+  $('#aimedProfit, #sellPrice, #buyPrice, #buyQuantity, #meanBuy').on('input change', simulatorStyleUpdate);
+
+  // BUY
+
+  $('#buyPrice').on('input', function(){
+    if($('#buyQuantity').val() == ""){return};
+    $('#meanBuy').val(meanBuyUpdate($(this).val(), $('#buyQuantity').val()));
+    $('#meanBuy').change();
+  });
+  
+  $('#buyQuantity').on('input', function(){
+    if($('#buyPrice').val() == ""){return};
+    $('#meanBuy').val(meanBuyUpdate($('#buyPrice').val(), $(this).val()));
+    $('#meanBuy').change();
+  });
+  
+  $('#meanBuy').on('input', function(){
+    if($('#buyQuantity').val() == ""){return};
+    $('#buyPrice').val(priceUpdate($(this).val(), $('#buyQuantity').val()));
+    $('#buyPrice').change();
+  });
   
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
@@ -1089,8 +1228,11 @@ async function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    autoRefreshSet(params['autoRefresh']);
-    getDataAndDisplay(false);
+    // autoRefreshSet(params['autoRefresh']);
+    // getDataAndDisplay(false);
+
+    walletData = oldWalletData;
+    displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };

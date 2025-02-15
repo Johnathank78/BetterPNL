@@ -154,6 +154,56 @@ body{
     width: 100%;
 }
 
+.simulator_forthLine{
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Two equal columns */
+  grid-template-rows: auto auto; /* Two rows */
+  gap: 20px; /* Optional: adds space between items */
+}
+
+.lastRow{
+    grid-column: span 2;
+}
+
+.simulatorSelector_wrapper{
+    position: relative;
+    display: flex;
+    flex-direction: row;
+
+    background-color: var(--light-color);
+
+    height: 30px;
+    width: 150px;
+
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.simulatorSelector_opt{
+    display: flex;
+
+    justify-content: center;
+    align-items: center;
+
+    height: 100%;
+    width: 50%;
+
+    font-size: 14px;
+}
+
+.simulatorSelectorHighlight{
+    position: absolute;
+    background-color: var(--superLight-color);
+
+    height: 100%;
+    width: 50%;
+    
+    top: 0;
+    left: 0;
+
+    border-radius: 8px;
+}
+
 #coin_selector{
     display: flex;
     align-items: center;
@@ -266,7 +316,7 @@ body{
     scrollbar-width: none;  /* Firefox */
 }
 
-.dollaSignPlaceholder{
+.dollaSignPlaceholder, .currencyPlaceholder{
     position: absolute;
     font-size: 20px;
 

@@ -131,6 +131,11 @@
             <div class="blurItem_wrapper simulator_wrapper">
                 <div class="simulator_firstLine">
                     <span class="simulator_mainText noselect">SIMULATOR</span>
+                    <div class="simulatorSelector_wrapper">
+                        <div class="simulatorSelectorHighlight"></div>
+                        <span class="simulatorSelector_opt profitForSale">SELL</span>
+                        <span class="simulatorSelector_opt SaleForProfit">BUY</span>
+                    </div>
                 </div>
 
                 <div class="simulator_secondLine">
@@ -138,16 +143,36 @@
                 </div>
 
                 <div class="simulator_thirdLine">
-                    <div class="blurItem_element_row key">
+                    <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">SELL PRICE</span>
                         <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
-                        <span class="dollaSignPlaceholder">$</span>
+                        <span class="currencyPlaceholder">$</span>
                     </div>
 
-                    <div class="blurItem_element_row key">
+                    <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">PROFIT</span>
                         <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="aimedProfit">
                         <span class="dollaSignPlaceholder">$</span>
+                    </div>
+                </div>
+
+                <div class="simulator_forthLine" style="display: none;">
+                    <div class="blurItem_element_row">
+                        <span class="blurItem_element_text noselect">QUANTITY</span>
+                        <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="buyQuantity">
+                        <span class="currencyPlaceholder">$</span>
+                    </div>
+
+                    <div class="blurItem_element_row">
+                        <span class="blurItem_element_text noselect">PRICE</span>
+                        <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="buyPrice">
+                        <span class="currencyPlaceholder">$</span>
+                    </div>
+
+                    <div class="blurItem_element_row lastRow">
+                        <span class="blurItem_element_text noselect">MEAN BUY</span>
+                        <input type="text" inputmode="numeric" class="blurItem_element_input blurItem_element_input_wide" placeholder="50" id="meanBuy">
+                        <span class="currencyPlaceholder">$</span>
                     </div>
                 </div>
 
