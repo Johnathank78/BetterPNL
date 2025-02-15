@@ -40,6 +40,19 @@ var haveWebNotificationsBeenAccepted = false;
 var refreshTimeout = null;
 var longClickTS = false;
 
+const stableCoins = {
+  "USDC": {
+    label: "USDC",
+    short: '$',
+    conversionRate: 1
+  },
+  "TRY": {
+    label: "TRY",
+    short: '₺',
+    conversionRate: null
+  }
+};
+
 // UTILITY
 
 function getObjectKeyIndex(obj, key, val){
@@ -218,29 +231,14 @@ async function signHmacSha256(queryString, secret) {
 
 async function callBinanceProxy(apiKey, endpoint, queryString) {
   const payload = { apiKey, endpoint, queryString };
-  var response = false;
 
-  try {
-    response = await fetchWithTimeout("https://betterpnl-api.onrender.com/proxySigned", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }, 8500);
-  } catch (error) {
-    if(error.message = 'Fetch timeout'){
-      bottomNotification("timeout");
-    }else{
-      bottomNotification("fetchError", response.status);
-    };
+  var response = response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 
-    clearData();
-    throw new Error("Proxy error: " + response.status);
-  };
-  
-  if(firstLog && isLogged) {
-    firstLog = false;
-    bottomNotification("connected");
-  };
+  if(!response.ok){throw new Error("Proxy error: " + response.status)};
 
   const data = await response.json();
   if (data.error) throw new Error(data.error);
@@ -252,7 +250,18 @@ async function getAccountInfo(apiKey, apiSecret) {
   let queryString = `timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
-  return callBinanceProxy(apiKey, "/api/v3/account", queryString);
+
+  const output = await callBinanceProxy(apiKey, "/api/v3/account", queryString);
+
+  if(output.error){
+    bottomNotification("fetchError", output.status);
+    clearData();
+  }else if(firstLog) {
+    firstLog = false;
+    bottomNotification("connected");
+  };
+
+  return output
 }
 
 async function getMyTrades(apiKey, apiSecret, symbol) {
@@ -261,14 +270,6 @@ async function getMyTrades(apiKey, apiSecret, symbol) {
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
   return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
-}
-
-const fetchWithTimeout = async (url, options, timeout = 5000) => {
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Fetch timeout')), timeout)
-  );
-
-  return Promise.race([fetch(url, options), timeoutPromise]);
 };
 
 async function getSymbolPrice(symbol){
@@ -276,6 +277,19 @@ async function getSymbolPrice(symbol){
   // If CORS blocks it, do the same "proxy" approach
   const url = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
   const resp = await fetch(url);
+
+  if (!resp.ok) {
+    throw new Error(`Error fetching ticker for ${symbol}: ${resp.status}`);
+  }
+  return resp.json();
+};
+
+async function getExchangeInfo(){
+  // Let's try direct fetch (public endpoint).
+  // If CORS blocks it, do the same "proxy" approach
+  const url = `https://api.binance.com/api/v3/exchangeInfo`;
+  const resp = await fetch(url);
+
   if (!resp.ok) {
     throw new Error(`Error fetching ticker for ${symbol}: ${resp.status}`);
   }
@@ -357,103 +371,94 @@ function computeAveragePrice(trades){
   return null;
 };
 
-async function fetchAndComputePortfolio(apiKey, apiSecret){
+async function fetchAndComputePortfolio(apiKey, apiSecret) {
   const result = {
     global: { bank: 0, pnl: 0 },
     coins: []
   };
 
-  // 7.1 Get account info (which is now an array of balances)
+  // 7.1 Récupération des informations de compte (tableau des balances)
   const accountArray = await getAccountInfo(apiKey, apiSecret);
   let totalBalanceCurrent = 0;
   let totalPnl = 0;
 
-  // Loop through each balance entry
+  // Parcours de chaque balance
   for (const balance of accountArray.balances) {
     const asset = balance.asset;
     const free = parseFloat(balance.free);
     const locked = parseFloat(balance.locked);
     const quantity = free + locked;
 
-    // Skip if zero total
+    // Ignorer si la quantité totale est nulle ou négative
     if (quantity <= 0) continue;
 
-    // Special case: USDC
-    if (asset.toUpperCase() === "USDC") {
-      // skip if < 1
-      if (quantity < 1) {
+    // 1. Traitement des stable coins
+    if (stableCoins.hasOwnProperty(asset.toUpperCase())) {
+      const stableCoin = stableCoins[asset.toUpperCase()];
+      if (stableCoin.conversionRate !== null) {
+        totalBalanceCurrent += quantity * stableCoin.conversionRate;
+      } else {
+        try {
+          const tickerData = await getSymbolPrice("USDC" + asset.toUpperCase());
+          stableCoin.conversionRate = parseFloat(tickerData.price);
+          totalBalanceCurrent += quantity * stableCoin.conversionRate;
+        } catch (e) {
+          continue;
+        }
+      }
+      continue;
+    }
+
+    // 2. Traitement des autres actifs
+    let trades = [];
+    let symbolFound = null;
+    let detectedStable = null;
+
+    // On teste chaque paire possible avec les stable coins définis
+    for (const stable in stableCoins) {
+      const symbolCandidate = asset + stable;
+      try {
+        trades = await getMyTrades(apiKey, apiSecret, symbolCandidate);
+        symbolFound = symbolCandidate;
+        detectedStable = stable;
+        break;
+      } catch (e) {
         continue;
       }
-      // Value of USDC is exactly the quantity
-      const currentValue = quantity;
-      const purchaseValue = currentValue;
-      const pnl = 0;
-      totalBalanceCurrent += currentValue;
-      totalPnl += pnl;
-
-      result.coins.push({
-        asset: "USDC",
-        amount: quantity.toString(),
-        price: "1.00",
-        actual_value: currentValue.toFixed(2),
-        buy_value: purchaseValue.toFixed(2),
-        mean_buy: "1.00",
-        ongoing_pnl: pnl.toFixed(2)
-      });
-      continue;
     }
 
-    // For other assets, we get trades + ticker
-    const symbol = asset + "USDC";
+    if (!symbolFound) continue;
 
-    // 7.2 Get trades for that symbol (array)
-    let trades = [];
-    try {
-      trades = await getMyTrades(apiKey, apiSecret, symbol);
-    } catch (e) {
-      // If there's an error (e.g., no trades, invalid symbol) => skip
-      continue;
-    }
-
-    // 7.3 Compute average price from trades
+    // 7.3 Calcul du prix moyen d'achat à partir des trades récupérés
     const avgPrice = computeAveragePrice(trades);
 
-    // 7.4 get current price (public endpoint)
+    // 7.4 Récupération du prix actuel via l'endpoint public pour la paire trouvée
     let currentPrice = null;
     let currentValue = 0;
-
     try {
-      const tickerData = await getSymbolPrice(symbol); // e.g. { symbol: "SOLUSDC", price: "231.40" }
+      const tickerData = await getSymbolPrice(symbolFound);
       currentPrice = parseFloat(tickerData.price);
-      currentValue = quantity * currentPrice;
+      currentValue = quantity * currentPrice / stableCoins[detectedStable].conversionRate;
     } catch (e) {
-      // Ticker not found => skip or treat as 0
       currentPrice = null;
     }
 
-    // 7.5 Compute purchaseValue & PnL
+    // 7.5 Calcul de la valeur d'achat et du PnL
     let purchaseValue = 0;
     let pnl = 0;
-
     if (avgPrice !== null) {
-      purchaseValue = quantity * avgPrice;
+      purchaseValue = quantity * avgPrice / stableCoins[detectedStable].conversionRate;
       pnl = currentValue - purchaseValue;
     } else {
-      // If no average cost, assume purchase = current
       purchaseValue = currentValue;
       pnl = 0;
     }
 
-    // skip if < 1 USDC in value
-    if (currentValue < 1 && purchaseValue < 1) {
-      continue;
-    }
+    if (currentValue < 1 && purchaseValue < 1) continue;
 
-    // Tally up totals
     totalBalanceCurrent += currentValue;
     totalPnl += pnl;
 
-    // Add to the final "coins" array
     result.coins.push({
       asset: asset,
       amount: quantity.toString(),
@@ -461,16 +466,18 @@ async function fetchAndComputePortfolio(apiKey, apiSecret){
       actual_value: currentValue.toFixed(2),
       buy_value: purchaseValue.toFixed(2),
       mean_buy: avgPrice ? avgPrice.toFixed(2) : "N/A",
-      ongoing_pnl: pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)
+      ongoing_pnl: pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2),
+      quoteCurrency: stableCoins[detectedStable].label
     });
   }
 
-  // 7.6 Final global stats
+  // 7.6 Statistiques globales finales (les montants sont en USDC)
   result.global.bank = totalBalanceCurrent.toFixed(2);
   result.global.pnl = totalPnl >= 0 ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2);
 
   return result;
 };
+
 
 //  DISPLAY DATA
 
@@ -498,9 +505,7 @@ function displayNewData(walletData){
 
   updateGlobalElements(walletData.global.bank, walletData.global.pnl);
   filterWalletData(walletData).coins.forEach(function(coin) {
-    if(coin.asset != 'USDC'){
-      generateAndPushTile(coin.asset, coin.amount, coin.price, coin.actual_value, coin.buy_value, coin.mean_buy, coin.ongoing_pnl);
-    };
+    generateAndPushTile(coin);
   });
 };
 
@@ -522,37 +527,39 @@ function updateGlobalElements(bank, pnl){
   $('.pnl_data').css('color', pnlColor)
 };
 
-function generateAndPushTile(asset, amount, price, actual_value, buy_value, mean_buy, ongoing_pnl) {
+function generateAndPushTile(coin){
   // Convert the PnL to a number
-  const pnlNumber = parseFloat(ongoing_pnl);
+  const pnlNumber = parseFloat(coin.ongoing_pnl);
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
   const formattedPnl = sign + Math.abs(pnlNumber);
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
+  const short = stableCoins[coin.quoteCurrency].short;
+
   // Build the HTML using a template literal
   const tileHtml = `
       <div class="detail_elem">
           <div class="detail_elem_header">
               <span class="detail_elem_title">
-                  ${asset}
-                  <span class="detail_elem_amount">${parseFloat(amount).toFixed(8)}</span>
+                  ${coin.asset}
+                  <span class="detail_elem_amount">${parseFloat(coin.amount).toFixed(8)}</span>
               </span>
-              <span class="detail_elem_price">${parseFloat(price).toFixed(2)} $</span>
+              <span class="detail_elem_price">${parseFloat(coin.price).toFixed(2)} ${short}</span>
           </div>
           <div class="detail_elem_body">
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value">${parseFloat(actual_value).toFixed(2)} $</span>
+                  <span class="detail_subElem_data actual_value">${parseFloat(coin.actual_value).toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${parseFloat(mean_buy).toFixed(2)} $</span>
+                  <span class="detail_subElem_data mean_buy">${parseFloat(coin.mean_buy).toFixed(2)} ${short}</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value">${parseFloat(buy_value).toFixed(2)} $</span>
+                  <span class="detail_subElem_data buy_value">${parseFloat(coin.buy_value).toFixed(2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ONGOING PNL</span>
@@ -862,9 +869,12 @@ function backerMouseupHandler(){
 
 function loadSimulatorData(){
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+  let short = stableCoins[coin.quoteCurrency].short;
     
+  $('.simulator_meanBuy').text(coin.mean_buy + short);
   $('.simulator_buyQuant').text(coin.buy_value + "$");
-  $('.simulator_meanBuy').text(coin.mean_buy + "$");
+  
+  $('.dollaSignPlaceholder').eq(0).text(short);
   $('#coin_selector').val(focusedCoin);
   
   $('#sellPrice').attr('placeholder', parseInt(parseFloat(coin.mean_buy) * 1.05));
@@ -905,7 +915,7 @@ function sellPriceUpdate(profit){
 
 // -------
 
-function pnl(){
+async function pnl(){
 
   // EVENT HANDLERS
 
