@@ -254,7 +254,13 @@ async function callBinanceProxy(apiKey, endpoint, queryString) {
     body: JSON.stringify(payload)
   });
 
-  if(!response.ok){throw new Error("Proxy error: " + response.status)};
+  if(!response.ok){
+    bottomNotification("fetchError", response.status);
+    clearData();
+  }else if(firstLog) {
+    firstLog = false;
+    bottomNotification("connected");
+  };
 
   const data = await response.json();
   if (data.error) throw new Error(data.error);
@@ -268,15 +274,6 @@ async function getAccountInfo(apiKey, apiSecret) {
   queryString += `&signature=${signature}`;
 
   const output = await callBinanceProxy(apiKey, "/api/v3/account", queryString);
-
-  if(output.error){
-    bottomNotification("fetchError", output.status);
-    clearData();
-  }else if(firstLog) {
-    firstLog = false;
-    bottomNotification("connected");
-  };
-
   return output
 }
 
@@ -285,25 +282,15 @@ async function getMyTrades(apiKey, apiSecret, symbol) {
   let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
-  return callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
+
+  const output = await callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
+  return output;
 };
 
 async function getSymbolPrice(symbol){
   // Let's try direct fetch (public endpoint).
   // If CORS blocks it, do the same "proxy" approach
   const url = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-  const resp = await fetch(url);
-
-  if (!resp.ok) {
-    throw new Error(`Error fetching ticker for ${symbol}: ${resp.status}`);
-  }
-  return resp.json();
-};
-
-async function getExchangeInfo(){
-  // Let's try direct fetch (public endpoint).
-  // If CORS blocks it, do the same "proxy" approach
-  const url = `https://api.binance.com/api/v3/exchangeInfo`;
   const resp = await fetch(url);
 
   if (!resp.ok) {
@@ -411,7 +398,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
   var balances;
   let totalBalanceCurrent = 0;
   let totalPnl = 0;
-  
+
   const result = {
     global: { bank: 0, pnl: 0 },
     coins: []
