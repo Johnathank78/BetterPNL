@@ -1228,11 +1228,8 @@ async function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    // autoRefreshSet(params['autoRefresh']);
-    // getDataAndDisplay(false);
-
-    walletData = oldWalletData;
-    displayNewData(walletData);
+    autoRefreshSet(params['autoRefresh']);
+    getDataAndDisplay(false);
   }else{
     initDOMupdate(false);
   };
