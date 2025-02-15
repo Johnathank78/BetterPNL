@@ -408,17 +408,23 @@ function filterHoldings(walletData, balances){
 };
 
 async function fetchAndComputePortfolio(apiKey, apiSecret) {
+  var balances;
+  let totalBalanceCurrent = 0;
+  let totalPnl = 0;
+  
   const result = {
     global: { bank: 0, pnl: 0 },
     coins: []
   };
 
-  // 7.1 Récupération des informations de compte (tableau des balances)
+  // Récupération des informations de compte (tableau des balances)
   const accountInfo = await getAccountInfo(apiKey, apiSecret);
-  const balances = filterHoldings(oldWalletData, accountInfo.balances);
 
-  let totalBalanceCurrent = 0;
-  let totalPnl = 0;
+  if(oldWalletData){
+    balances = filterHoldings(oldWalletData, accountInfo.balances);
+  }else{
+    balances = accountInfo.balances;
+  };
 
   // Parcours de chaque balance
   for (const balance of balances) {
