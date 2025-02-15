@@ -48,11 +48,13 @@ const stableCoins = {
     short: '$',
     conversionRate: 1
   },
+
   "TRY": {
     label: "TRY",
     short: '₺',
     conversionRate: null
   },
+
   "EUR": {
     label: "EUR",
     short: '€',
@@ -367,6 +369,7 @@ function computeAveragePrice(trades){
   for (const t of trades) {
     const qty = parseFloat(t.qty);
     const price = parseFloat(t.price);
+
     if (t.isBuyer) {
       positionQty += qty;
       positionCost += qty * price;
@@ -381,8 +384,27 @@ function computeAveragePrice(trades){
 
   if (positionQty > 0) {
     return positionCost / positionQty;
-  }
+  };
+
   return null;
+};
+
+function filterHoldings(walletData, balances){
+  return balances.filter(b => {
+    const asset = b.asset;
+    const quantity = parseFloat(b.free) + parseFloat(b.locked);
+
+    if(!stableCoins.hasOwnProperty(asset.toUpperCase())){
+      let coin = walletData.coins.find(c => c.asset === asset);
+      
+      if(coin){ 
+        let value = quantity * coin.price;
+        return value > 0.5;
+      }
+    }else{
+      return true;
+    };
+  });
 };
 
 async function fetchAndComputePortfolio(apiKey, apiSecret) {
@@ -392,12 +414,14 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
   };
 
   // 7.1 Récupération des informations de compte (tableau des balances)
-  const accountArray = await getAccountInfo(apiKey, apiSecret);
+  const accountInfo = await getAccountInfo(apiKey, apiSecret);
+  const balances = filterHoldings(oldWalletData, accountInfo.balances);
+
   let totalBalanceCurrent = 0;
   let totalPnl = 0;
 
   // Parcours de chaque balance
-  for (const balance of accountArray.balances) {
+  for (const balance of balances) {
     const asset = balance.asset;
     const free = parseFloat(balance.free);
     const locked = parseFloat(balance.locked);
@@ -444,6 +468,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     // On teste chaque paire possible avec les stable coins définis
     for (const stable in stableCoins) {
       const symbolCandidate = asset + stable;
+      
       try {
         trades = await getMyTrades(apiKey, apiSecret, symbolCandidate);
         symbolFound = symbolCandidate;
@@ -1291,5 +1316,5 @@ async function pnl(){
   };
 };
 
-//RUN
+//RUN 
 $(document).ready(function(){pnl()})
