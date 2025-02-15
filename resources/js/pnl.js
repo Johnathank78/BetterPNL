@@ -100,8 +100,6 @@ function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
     offset = Math.floor(Math.random() * (randomAmount + 1));
   };
 
-  console.log(Math.max(1, (delay + offset) * 1000));
-
   return Math.max(1, (delay + offset) * 1000);
 };
 
@@ -409,19 +407,21 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     if (quantity <= 0) continue;
 
     // 1. Traitement des stable coins
-    if (stableCoins.hasOwnProperty(asset.toUpperCase())) {
+    if (stableCoins.hasOwnProperty(asset.toUpperCase())){
       const stableCoin = stableCoins[asset.toUpperCase()];
-      if (stableCoin.conversionRate !== null) {
-        totalBalanceCurrent += quantity * stableCoin.conversionRate;
-      } else {
-        try {
+
+      if(stableCoin.conversionRate !== null){
+        totalBalanceCurrent += quantity / stableCoin.conversionRate;
+      }else{
+        try{
           const tickerData = await getSymbolPrice("USDC" + stableCoin.label);
           stableCoin.conversionRate = parseFloat(tickerData.price);
           totalBalanceCurrent += quantity / stableCoin.conversionRate;
-        } catch (e) {
+        }catch (e){
           continue;
         }
-      }
+      };
+
       continue;
     }
 
@@ -463,10 +463,10 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     // 7.5 Calcul de la valeur d'achat et du PnL
     let purchaseValue = 0;
     let pnl = 0;
-    if (avgPrice !== null) {
+    if(avgPrice !== null) {
       purchaseValue = quantity * avgPrice / stableCoins[detectedStable].conversionRate;
       pnl = currentValue - purchaseValue;
-    } else {
+    }else{
       purchaseValue = currentValue;
       pnl = 0;
     }
@@ -478,12 +478,12 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
 
     result.coins.push({
       asset: asset,
-      amount: quantity.toString(),
-      price: currentPrice ? currentPrice.toFixed(2) : "N/A",
-      actual_value: currentValue.toFixed(2),
-      buy_value: purchaseValue.toFixed(2),
-      mean_buy: avgPrice ? avgPrice.toFixed(2) : "N/A",
-      ongoing_pnl: pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2),
+      amount: quantity,
+      price: currentPrice ? currentPrice : "N/A",
+      actual_value: currentValue,
+      buy_value: purchaseValue,
+      mean_buy: avgPrice ? avgPrice : "N/A",
+      ongoing_pnl: pnl >= 0 ? `+${pnl}` : pnl,
       quoteCurrency: stableCoins[detectedStable].label
     });
   }
@@ -528,9 +528,9 @@ function displayNewData(walletData){
 
 async function refreshData(filter=false){
   if(filter){
-      displayNewData(walletData)
+    displayNewData(walletData)
   }else{
-      getDataAndDisplay(true);
+    getDataAndDisplay(true);
   };
 };
 
@@ -550,7 +550,7 @@ function generateAndPushTile(coin){
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
-  const formattedPnl = sign + Math.abs(pnlNumber);
+  const formattedPnl = sign + Math.abs(pnlNumber).toFixed(2);
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
   const short = stableCoins[coin.quoteCurrency].short;
@@ -868,12 +868,12 @@ function loadSimulatorData(mode){
   let stableCoin = stableCoins[coin.quoteCurrency];
   let short = stableCoin.short;
     
-  $('.simulator_meanBuy').text(coin.mean_buy + short);
+  $('.simulator_meanBuy').text(parseFloat(coin.mean_buy).toFixed(2) + short);
 
   if(mode == "buy"){
-    $('.simulator_buyQuant').text(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate) + short);
+    $('.simulator_buyQuant').text(parseFloat(coin.buy_value).toFixed(2) * parseFloat(stableCoin.conversionRate).toFixed(2) + short);
   }else if(mode == "sell"){
-    $('.simulator_buyQuant').text(coin.buy_value + "$");
+    $('.simulator_buyQuant').text(parseFloat(coin.buy_value).toFixed(2) + "$");
   };
   
   $('.currencyPlaceholder').text(short);
@@ -885,7 +885,7 @@ function loadSimulatorData(mode){
   $('#aimedProfit').attr('placeholder', aimedProfitUpdate(placeholderSellPrice));
 
   let placeholderMeanBuyPrice = parseFloat(coin.mean_buy * 0.85).toFixed(2);
-  let pastQuantity = parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate).toFixed(2);
+  let pastQuantity = (parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate)).toFixed(2);
 
   $('#buyQuantity').attr('placeholder', pastQuantity);
   $('#meanBuy').attr('placeholder', placeholderMeanBuyPrice);
@@ -1013,11 +1013,14 @@ function meanBuyUpdate(price, quantity){
 
 async function pnl(){
 
-  // EVENT HANDLERS
+  // NAVIGATION
 
-  $(document).on('click', '.profile_connect', function(){
-      openConnect();
+  $('.blurBG').on('click', function(e){
+    if(!$(e.target).is(this)){return}
+    closeBlurPage();
   });
+
+  // CONNECT
 
   $(document).on('click', '.detail_connect', function(){
     if($(this).text() == "FETCH RETRY"){
@@ -1027,25 +1030,10 @@ async function pnl(){
     };
   });
 
-  $('.detail_select').on('change', function(){
-    params['filter']['var'] = $("#sortingVar").val();
-    params['filter']['way'] = $("#sortingWay").val();
-
-    params_save(params);
-    refreshData(true);
+  $('.profile_connect').on('click', function(){
+      openConnect();
   });
 
-  $('.refresh').on('click', function(){
-    if(!isFetching && isLogged){
-      refreshData();
-    };
-  });
-
-  $('.blurBG').on('click', function(e){
-      if(!$(e.target).is(this)){return}
-      closeBlurPage();
-  });
-  
   $('.connectBody_wrapper').on('submit', function(e){
     e.preventDefault();
 
@@ -1083,14 +1071,26 @@ async function pnl(){
     };
   });
 
+  // FILTERS & FETCHING
+
+  $('.detail_select').on('change', function(){
+    params['filter']['var'] = $("#sortingVar").val();
+    params['filter']['way'] = $("#sortingWay").val();
+
+    params_save(params);
+    refreshData(true);
+  });
+
+  $('.refresh').on('click', function(){
+    if(!isFetching && isLogged){
+      refreshData();
+    };
+  });
+
   $('.autoRefreshing').on('click', function(){
     autoRefreshSet(!params['autoRefresh']);
     params['autoRefresh'] = !params['autoRefresh'];
     params_save(params);
-  });
-
-  $('.connect_element_input').on('click', function(){
-    this.setSelectionRange(0, this.value.length);
   });
 
   $('.refreshTiming').on('change', function(){
@@ -1108,9 +1108,7 @@ async function pnl(){
     };
   });
 
-  $(document).on('input', ".resizingInp", function(){
-    resizeInput(this);
-  });
+  // -----
 
   document.addEventListener("visibilitychange", async () => {
     if(document.visibilityState === 'hidden'){
@@ -1197,6 +1195,8 @@ async function pnl(){
     $('#buyPrice').change();
   });
   
+  // UTILITY
+
   if(isMobile){
     $('#IOSbackerUI').css('display', "block");
 
@@ -1213,10 +1213,27 @@ async function pnl(){
 
   $(document).on("click", NotificationGrantMouseDownHandler);
 
+  $('.connect_element_input').on('click', function(){
+    this.setSelectionRange(0, this.value.length);
+  });
+
   // GRAPHIC UPDATE
 
   document.oncontextmenu = function(){return false};
+
   $('img').attr('draggable', false);
+
+  $('#api_secret-val').on('input', function(){
+    if($(this).val() == ""){
+      $('#api_secret-val').css('fontSize', '16px');
+    }else{
+      $('#api_secret-val').css('fontSize', '12px');
+    };
+  });
+
+  $(document).on('input', ".resizingInp", function(){
+    resizeInput(this);
+  });
 
   // INIT
 
