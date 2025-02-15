@@ -46,9 +46,19 @@ const stableCoins = {
     short: '$',
     conversionRate: 1
   },
+  "USDT": {
+    label: "USDT",
+    short: '$',
+    conversionRate: 1
+  },
   "TRY": {
     label: "TRY",
     short: '₺',
+    conversionRate: null
+  },
+  "EUR": {
+    label: "EUR",
+    short: '€',
     conversionRate: null
   }
 };
@@ -401,7 +411,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
         try {
           const tickerData = await getSymbolPrice("USDC" + asset.toUpperCase());
           stableCoin.conversionRate = parseFloat(tickerData.price);
-          totalBalanceCurrent += quantity * stableCoin.conversionRate;
+          totalBalanceCurrent += quantity / stableCoin.conversionRate;
         } catch (e) {
           continue;
         }
@@ -1079,8 +1089,6 @@ async function pnl(){
   oldWalletData = old_read();
 
   if(isLogged){
-    firstLog = false;
-
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
