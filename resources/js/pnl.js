@@ -46,11 +46,6 @@ const stableCoins = {
     short: '$',
     conversionRate: 1
   },
-  "USDT": {
-    label: "USDT",
-    short: '$',
-    conversionRate: 1
-  },
   "TRY": {
     label: "TRY",
     short: '₺',
@@ -409,7 +404,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
         totalBalanceCurrent += quantity * stableCoin.conversionRate;
       } else {
         try {
-          const tickerData = await getSymbolPrice("USDC" + asset.toUpperCase());
+          const tickerData = await getSymbolPrice("USDC" + stableCoin.label);
           stableCoin.conversionRate = parseFloat(tickerData.price);
           totalBalanceCurrent += quantity / stableCoin.conversionRate;
         } catch (e) {
@@ -431,6 +426,8 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
         trades = await getMyTrades(apiKey, apiSecret, symbolCandidate);
         symbolFound = symbolCandidate;
         detectedStable = stable;
+
+        console.log("Found trades for", symbolFound);
         break;
       } catch (e) {
         continue;
