@@ -64,6 +64,21 @@ const stableCoins = {
 
 // UTILITY
 
+function findDifferentCharacter(str1, str2) {
+  if(str1.length >= str2.length){return};
+
+  for (let i = 0; i < str2.length; i++) {
+      if (str1[i] !== str2[i]) {
+          return {
+              value: str2[i],
+              position: i
+          };
+      };
+  };
+
+  return false;
+};
+
 function isNacN(input) {
   if (typeof input === 'number') {
       input = input.toString();
@@ -1011,7 +1026,6 @@ function simulatorStyleUpdate(){
 
 function findAvailableFunds(quoteCurrency){
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", quoteCurrency)];
-
   return coin.amount;
 };
 
@@ -1204,7 +1218,7 @@ async function pnl(){
 
   // SELL
 
-  $('#sellPrice').on('input', function(){
+  $('#sellPrice').on('input change', function(){
     $('#aimedProfit').val(aimedProfitUpdate($(this).val()));
   });
   
@@ -1242,6 +1256,14 @@ async function pnl(){
     $('#buyQuantity').change();
   });
 
+  $('#actualPrice').on('click', function(){
+    let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+    let price = parseFloat(coin.price).toFixed(2);
+
+    $('#sellPrice').val(price);
+    $('#sellPrice').change();
+  });
+
   $('#currentPrice').on('click', function(){
     let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
 
@@ -1264,6 +1286,69 @@ async function pnl(){
   }else{
     $('#IOSbackerUI').remove();
   };
+
+  $(document).on("keyup", '.strictlyNumeric, .strictlyFloatable', function(e){
+
+    function deleteFromStr(str1, pos){
+        tweaked = true;
+        return str1.slice(0, pos) + str1.slice(pos + 1);
+    };
+
+    let previous_state = false;
+    if($(this).data('val') === undefined){
+        previous_state = $(this).val();
+        $(this).data('val', previous_state);
+    }else{
+        previous_state = $(this).data('val');
+    };
+
+    let actual_state = $(this).val();
+    let diff = findDifferentCharacter(previous_state, actual_state);
+    let tweaked = false;
+
+    if(diff){
+        let txt = diff.value;
+        let pos = diff.position;
+
+        if($(this).is(".strictlyNumeric")){
+            if(!txt.match(/[0-9]/)){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+        };
+
+        if($(this).is(".strictlyFloatable")){
+            if(!txt.match(/[0-9.]/)){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+        };
+
+        if($(this).is(".update_schedule_input_hours, .update_schedule_input_minutes")){
+            if(actual_state.length == 3){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+        };
+
+        if($(this).is(".timeString")){
+            let previous = actual_state[pos - 1];
+
+            if((isNaN(previous) || previous == "") && txt.match(/[ywdhms]/)){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+
+            if(txt.match(/[ywdhms]/) && previous_state.includes(txt)){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+
+            if(!txt.match(/[0123456789ywdhms]/)){
+                $(this).val(deleteFromStr(actual_state, pos));
+            };
+        };
+
+        if(tweaked){this.setSelectionRange(pos, pos)};
+    };
+
+    $(this).data('val', $(this).val());
+  });
 
   $(document).on("click", NotificationGrantMouseDownHandler);
 

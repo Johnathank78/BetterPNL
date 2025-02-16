@@ -173,7 +173,7 @@ body{
     background-color: var(--light-color);
 
     height: 30px;
-    width: 150px;
+    width: 145px;
 
     border-radius: 8px;
     cursor: pointer;
@@ -328,7 +328,7 @@ body{
     pointer-events: none;
 }
 
-#putMaxInvest, #currentPrice{
+#putMaxInvest, #currentPrice, #actualPrice{
     position: absolute;
     font-size: 12px;
 
