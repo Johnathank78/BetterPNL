@@ -1287,68 +1287,24 @@ async function pnl(){
     $('#IOSbackerUI').remove();
   };
 
-  $(document).on("keyup", '.strictlyNumeric, .strictlyFloatable', function(e){
+  $(document).on("keydown", '.strictlyNumeric, .strictlyFloatable', function(e) {
+    let allowedKeys = [];
 
-    function deleteFromStr(str1, pos){
-        tweaked = true;
-        return str1.slice(0, pos) + str1.slice(pos + 1);
+    if ($(this).hasClass("strictlyNumeric")) {
+        allowedKeys = [..."0123456789", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
     };
 
-    let previous_state = false;
-    if($(this).data('val') === undefined){
-        previous_state = $(this).val();
-        $(this).data('val', previous_state);
-    }else{
-        previous_state = $(this).data('val');
+    if ($(this).hasClass("strictlyFloatable")) {
+        allowedKeys = [..."0123456789.", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
+        if ($(this).val().includes(".") && e.key === ".") {
+            e.preventDefault();
+        };
     };
 
-    let actual_state = $(this).val();
-    let diff = findDifferentCharacter(previous_state, actual_state);
-    let tweaked = false;
-
-    if(diff){
-        let txt = diff.value;
-        let pos = diff.position;
-
-        if($(this).is(".strictlyNumeric")){
-            if(!txt.match(/[0-9]/)){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-        };
-
-        if($(this).is(".strictlyFloatable")){
-            if(!txt.match(/[0-9.]/)){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-        };
-
-        if($(this).is(".update_schedule_input_hours, .update_schedule_input_minutes")){
-            if(actual_state.length == 3){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-        };
-
-        if($(this).is(".timeString")){
-            let previous = actual_state[pos - 1];
-
-            if((isNaN(previous) || previous == "") && txt.match(/[ywdhms]/)){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-
-            if(txt.match(/[ywdhms]/) && previous_state.includes(txt)){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-
-            if(!txt.match(/[0123456789ywdhms]/)){
-                $(this).val(deleteFromStr(actual_state, pos));
-            };
-        };
-
-        if(tweaked){this.setSelectionRange(pos, pos)};
-    };
-
-    $(this).data('val', $(this).val());
-  });
+    if (!allowedKeys.includes(e.key)) {
+        e.preventDefault();
+    }
+});
 
   $(document).on("click", NotificationGrantMouseDownHandler);
 
@@ -1384,11 +1340,11 @@ async function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    autoRefreshSet(params['autoRefresh']);
-    getDataAndDisplay(false);
+    // autoRefreshSet(params['autoRefresh']);
+    // getDataAndDisplay(false);
 
-    // walletData = oldWalletData;
-    // displayNewData(walletData);
+    walletData = oldWalletData;
+    displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };
