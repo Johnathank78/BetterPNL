@@ -554,6 +554,7 @@ async function getDataAndDisplay(refresh=false) {
 
     if(params['autoRefresh']){startTimeout(params['refreshTime'])};
 
+    $('.refresh').text("REFRESH");
     displayNewData(walletData);
     fetchStyleUpdate(false);
   };
@@ -657,8 +658,10 @@ function disconnect(){
 };
 
 function clearData(){
-
   if(oldWalletData){
+    fetchStyleUpdate(false);
+    $('.refresh').text("RETRY");
+
     walletData = cloneOBJ(oldWalletData);
     displayNewData(walletData);
   }else{
@@ -672,7 +675,6 @@ function clearData(){
     
     initDOMupdate(false);
   };
-  
 };
 
 // GRAPHIC UPDATE
@@ -1136,7 +1138,10 @@ async function pnl(){
     params['filter']['way'] = $("#sortingWay").val();
 
     params_save(params);
-    refreshData(true);
+    
+    if(!isFetching && isLogged){
+      refreshData(true);
+    }
   });
 
   $('.refresh').on('click', function(){
