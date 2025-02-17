@@ -403,7 +403,7 @@ function filterHoldings(walletData, balances){
         let value = quantity * coin.price;
         return value > 0.5;
       }else{
-        return true;
+        return quantity > 0;
       }
     }else{
       return true;
