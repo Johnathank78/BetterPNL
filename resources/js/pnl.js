@@ -658,6 +658,8 @@ function disconnect(){
 };
 
 function clearData(){
+  isFetching = false;
+
   if(oldWalletData){
     fetchStyleUpdate(false);
     $('.refresh').text("RETRY");
