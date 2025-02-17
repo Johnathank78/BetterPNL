@@ -260,7 +260,7 @@ async function signHmacSha256(queryString, secret) {
   return Array.from(signatureBytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function callBinanceProxy(apiKey, endpoint, queryString) {
+async function callBinanceProxy(apiKey, endpoint, queryString, first=false) {
   const payload = { apiKey, endpoint, queryString };
 
   var response = response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
@@ -269,10 +269,10 @@ async function callBinanceProxy(apiKey, endpoint, queryString) {
     body: JSON.stringify(payload)
   });
 
-  if(!response.ok){
+  if(!response.ok && first){
     bottomNotification("fetchError", response.status);
     clearData();
-  }else if(firstLog) {
+  }else if(first && firstLog) {
     firstLog = false;
     bottomNotification("connected");
   };
@@ -288,7 +288,7 @@ async function getAccountInfo(apiKey, apiSecret) {
   const signature = await signHmacSha256(queryString, apiSecret);
   queryString += `&signature=${signature}`;
 
-  const output = await callBinanceProxy(apiKey, "/api/v3/account", queryString);
+  const output = await callBinanceProxy(apiKey, "/api/v3/account", queryString, true);
   return output
 }
 
@@ -657,15 +657,22 @@ function disconnect(){
 };
 
 function clearData(){
-  $('.detail_elem_wrapper').children().not('.detail_connect').remove();
-  $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
-  $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
-  $('.pnl_data').css('color', 'var(--gray)');
 
-  $('.detail_connect').text("FETCH RETRY");
-  $('.detail_connect').css('display', 'flex');
-
-  initDOMupdate(false);
+  if(oldWalletData){
+    walletData = cloneOBJ(oldWalletData);
+    displayNewData(walletData);
+  }else{
+    $('.detail_elem_wrapper').children().not('.detail_connect').remove();
+    $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
+    $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
+    $('.pnl_data').css('color', 'var(--gray)');
+    
+    $('.detail_connect').text("FETCH RETRY");
+    $('.detail_connect').css('display', 'flex');
+    
+    initDOMupdate(false);
+  };
+  
 };
 
 // GRAPHIC UPDATE
@@ -1287,12 +1294,8 @@ async function pnl(){
     $('#IOSbackerUI').remove();
   };
 
-  $(document).on("keydown", '.strictlyNumeric, .strictlyFloatable', function(e) {
+  $(document).on("keydown", '.strictlyFloatable', function(e) {
     let allowedKeys = [];
-
-    if ($(this).hasClass("strictlyNumeric")) {
-        allowedKeys = [..."0123456789", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
-    };
 
     if ($(this).hasClass("strictlyFloatable")) {
         allowedKeys = [..."0123456789.", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
@@ -1304,7 +1307,7 @@ async function pnl(){
     if (!allowedKeys.includes(e.key)) {
         e.preventDefault();
     }
-});
+  });
 
   $(document).on("click", NotificationGrantMouseDownHandler);
 
