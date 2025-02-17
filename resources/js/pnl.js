@@ -402,6 +402,8 @@ function filterHoldings(walletData, balances){
       if(coin){ 
         let value = quantity * coin.price;
         return value > 0.5;
+      }else{
+        return true;
       }
     }else{
       return true;
@@ -654,13 +656,14 @@ function disconnect(){
 
   $('#api_key-val').val("");
   $('#api_secret-val').val("");
-  $('.detail_connect').text("CONNECT TO API");
+
+  clearData(true)
 };
 
-function clearData(){
+function clearData(disconnect){
   isFetching = false;
 
-  if(oldWalletData){
+  if(oldWalletData && !disconnect){
     fetchStyleUpdate(false);
     $('.refresh').text("RETRY");
 
@@ -672,7 +675,12 @@ function clearData(){
     $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
     $('.pnl_data').css('color', 'var(--gray)');
     
-    $('.detail_connect').text("FETCH RETRY");
+    if(disconnect){
+      $('.detail_connect').text("CONNECT TO API");
+    }else{
+      $('.detail_connect').text("FETCH RETRY");
+    };
+
     $('.detail_connect').css('display', 'flex');
     
     initDOMupdate(false);
