@@ -418,10 +418,8 @@ function filterHoldings(walletData, coinPrices, balances){
     if(coinPrices){
       if(coinPrices[asset]){
         let value = quantity * coinPrices[asset];
-        if(value > 0) console.log("coin : present", asset, ' | ', value)
         return value > 0.5;
       }else{
-        if(quantity > 0) console.log("coin : absent", asset, ' | ', quantity)
         return quantity > 0;
       };
     }else{
@@ -430,10 +428,8 @@ function filterHoldings(walletData, coinPrices, balances){
         
         if(coin){ 
           let value = quantity * coin.price;
-          if(value > 0.5) console.log("wallet : present ", asset, ' | ', value)
           return value > 0.5;
         }else{
-          if(quantity > 0) console.log("wallet : absent ", asset, ' | ', quantity)
           return quantity > 0;
         }
       }else{
@@ -1008,36 +1004,6 @@ function clearSelection(mode){
   };
 };
 
-// --- SELL --- //
-
-function aimedProfitUpdate(sellPrice){
-  if(isNacN(sellPrice)){return ""};
-
-  sellPrice = parseFloat(sellPrice);
-  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-
-  let buyPrice = parseFloat(coin.mean_buy);
-  let amount = parseFloat(coin.buy_value);
-  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
-
-  let profit = ((sellPrice * conversionRate - buyPrice * conversionRate) / (buyPrice * conversionRate)) * amount;
-  return profit.toFixed(2);
-};
-
-function sellPriceUpdate(profit) {
-  if(isNacN(profit)){return ""};
-  
-  profit = parseFloat(profit);
-  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-
-  let buyPrice = parseFloat(coin.mean_buy);
-  let amount = parseFloat(coin.amount);
-  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
-
-  let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate);
-  return sellPrice.toFixed(2);
-};
-
 function simulatorStyleUpdate(){
   let sell = parseFloat($('#sellPrice').val());
   let profit = parseFloat($('#aimedProfit').val());
@@ -1080,6 +1046,36 @@ function simulatorStyleUpdate(){
 
   $('#aimedProfit').parent().find('.dollaSignPlaceholder').css('color', color);
   $('#aimedProfit').css('color', color);
+};
+
+// --- SELL --- //
+
+function aimedProfitUpdate(sellPrice){
+  if(isNacN(sellPrice)){return ""};
+
+  sellPrice = parseFloat(sellPrice);
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+  let buyPrice = parseFloat(coin.mean_buy);
+  let amount = parseFloat(coin.buy_value);
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
+
+  let profit = ((sellPrice * conversionRate - buyPrice * conversionRate) / (buyPrice * conversionRate)) * amount;
+  return profit.toFixed(2);
+};
+
+function sellPriceUpdate(profit) {
+  if(isNacN(profit)){return ""};
+  
+  profit = parseFloat(profit);
+  let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
+
+  let buyPrice = parseFloat(coin.mean_buy);
+  let amount = parseFloat(coin.amount);
+  let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
+
+  let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate);
+  return sellPrice.toFixed(2);
 };
 
 // --- BUY --- //
@@ -1289,26 +1285,21 @@ async function pnl(){
     $('#sellPrice').val(sellPriceUpdate($(this).val()));
   });
 
-  $('#aimedProfit, #sellPrice, #buyPrice, #buyQuantity, #meanBuy').on('input change', simulatorStyleUpdate);
-
   // BUY
 
   $('#buyPrice').on('input change', function(){
     if($('#buyQuantity').val() == ""){return};
     $('#meanBuy').val(meanBuyUpdate($(this).val(), $('#buyQuantity').val()));
-    $('#meanBuy').change();
   });
   
-  $('#buyQuantity').on('input change', function(){
+  $('#buyQuantity').on('input change', function(e){
     if($('#buyPrice').val() == ""){return};
     $('#meanBuy').val(meanBuyUpdate($('#buyPrice').val(), $(this).val()));
-    $('#meanBuy').change();
   });
   
-  $('#meanBuy').on('input', function(){
+  $('#meanBuy').on('input', function(e){
     if($('#buyQuantity').val() == ""){return};
     $('#buyPrice').val(priceUpdate($(this).val(), $('#buyQuantity').val()));
-    $('#buyPrice').change();
   });
 
   $('#putMaxInvest').on('click', function(){
@@ -1333,6 +1324,8 @@ async function pnl(){
     $('#buyPrice').val(coin.price);
     $('#buyPrice').change();
   });
+
+  $('#aimedProfit, #sellPrice, #buyPrice, #buyQuantity, #meanBuy').on('input change', simulatorStyleUpdate);
   
   // UTILITY
 
@@ -1351,10 +1344,9 @@ async function pnl(){
   };
 
   $(document).on("keydown", '.strictlyFloatable', function(e) {
-    let allowedKeys = [];
+    let allowedKeys = [..."0123456789.", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
 
     if ($(this).hasClass("strictlyFloatable")) {
-        allowedKeys = [..."0123456789.", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
         if ($(this).val().includes(".") && e.key === ".") {
             e.preventDefault();
         };
@@ -1399,11 +1391,11 @@ async function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    autoRefreshSet(params['autoRefresh']);
-    getDataAndDisplay(false);
+    // autoRefreshSet(params['autoRefresh']);
+    // getDataAndDisplay(false);
 
-    // walletData = oldWalletData;
-    // displayNewData(walletData);
+    walletData = oldWalletData;
+    displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };
