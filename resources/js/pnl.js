@@ -62,6 +62,8 @@ const stableCoins = {
   }
 };
 
+var coinPrices = false;
+
 // UTILITY
 
 function findDifferentCharacter(str1, str2) {
@@ -116,8 +118,6 @@ function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
   }else{
     offset = Math.floor(Math.random() * (randomAmount + 1));
   };
-
-  console.log((delay + offset) * 1000)
 
   return Math.max(1, (delay + offset) * 1000);
 };
@@ -410,22 +410,35 @@ function computeAveragePrice(trades){
   return null;
 };
 
-function filterHoldings(walletData, balances){
+function filterHoldings(walletData, coinPrices, balances){
   return balances.filter(b => {
     const asset = b.asset;
     const quantity = parseFloat(b.free) + parseFloat(b.locked);
 
-    if(!stableCoins.hasOwnProperty(asset.toUpperCase())){
-      let coin = walletData.coins.find(c => c.asset === asset);
-      
-      if(coin){ 
-        let value = quantity * coin.price;
+    if(coinPrices){
+      if(coinPrices[asset]){
+        let value = quantity * coinPrices[asset];
+        if(value > 0) console.log("coin : present", asset, ' | ', value)
         return value > 0.5;
       }else{
+        if(quantity > 0) console.log("coin : absent", asset, ' | ', quantity)
         return quantity > 0;
-      }
+      };
     }else{
-      return true;
+      if(!stableCoins.hasOwnProperty(asset.toUpperCase())){
+        let coin = walletData.coins.find(c => c.asset === asset);
+        
+        if(coin){ 
+          let value = quantity * coin.price;
+          if(value > 0.5) console.log("wallet : present ", asset, ' | ', value)
+          return value > 0.5;
+        }else{
+          if(quantity > 0) console.log("wallet : absent ", asset, ' | ', quantity)
+          return quantity > 0;
+        }
+      }else{
+        return true;
+      };
     };
   });
 };
@@ -440,11 +453,13 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     coins: []
   };
 
+  var tempPrices = coinPrices ? coinPrices : {"USDC": 1};
+
   // Récupération des informations de compte (tableau des balances)
   const accountInfo = await getAccountInfo(apiKey, apiSecret);
 
   if(oldWalletData){
-    balances = filterHoldings(oldWalletData, accountInfo.balances);
+    balances = filterHoldings(oldWalletData, coinPrices ,accountInfo.balances);
   }else{
     balances = accountInfo.balances;
   };
@@ -474,6 +489,8 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
         try{
           const tickerData = await getSymbolPrice("USDC" + stableCoin.label);
           stableCoin.conversionRate = parseFloat(tickerData.price);
+
+          tempPrices[stableCoin.label] = tickerData.price;
           
           result.coins.push({
             asset: asset,
@@ -520,6 +537,9 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
     try {
       const tickerData = await getSymbolPrice(symbolFound);
       currentPrice = parseFloat(tickerData.price);
+
+      tempPrices[asset] = tickerData.price;
+
       currentValue = quantity * currentPrice / stableCoins[detectedStable].conversionRate;
     } catch (e) {
       currentPrice = null;
@@ -556,6 +576,8 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
   // 7.6 Statistiques globales finales (les montants sont en USDC)
   result.global.bank = totalBalanceCurrent.toFixed(2);
   result.global.pnl = totalPnl >= 0 ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2);
+  
+  coinPrices = cloneOBJ(tempPrices);
 
   return result;
 };
