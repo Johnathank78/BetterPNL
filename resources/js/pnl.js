@@ -117,6 +117,8 @@ function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
     offset = Math.floor(Math.random() * (randomAmount + 1));
   };
 
+  console.log((delay + offset) * 1000)
+
   return Math.max(1, (delay + offset) * 1000);
 };
 
@@ -248,7 +250,14 @@ function autoRefreshSet(activated){
 
 // DATA FETCH 
 
-const wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
+async function fetchWithTimeout(url, options, timeout=10000) {
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Request timed out")), timeout)
+    )
+  ]);
+}
 
 async function signHmacSha256(queryString, secret) {
   const encoder = new TextEncoder();
@@ -263,24 +272,34 @@ async function signHmacSha256(queryString, secret) {
 async function callBinanceProxy(apiKey, endpoint, queryString, first=false) {
   const payload = { apiKey, endpoint, queryString };
 
-  var response = response = await fetch("https://betterpnl-api.onrender.com/proxySigned", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  try {
+    var response = await fetchWithTimeout("https://betterpnl-api.onrender.com/proxySigned", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }, randomiseDelay(8.5, 0.05));
+  
+    if(!response.ok && first) throw new Error("failed");
+    
+    if(first && firstLog){
+      firstLog = false;
+      bottomNotification("connected");
+    };
+  
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+  
+    return data;
+  } catch (error) {
+    if(error.message == "Request timed out"){
+      bottomNotification("timeout");
+    }else{
+      bottomNotification("fetchError", response.status);
+    };
 
-  if(!response.ok && first){
-    bottomNotification("fetchError", response.status);
     clearData();
-  }else if(first && firstLog) {
-    firstLog = false;
-    bottomNotification("connected");
   };
-
-  const data = await response.json();
-  if (data.error) throw new Error(data.error);
-  return data;
-}
+};
 
 async function getAccountInfo(apiKey, apiSecret) {
   const timestamp = Date.now();
