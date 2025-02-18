@@ -70,7 +70,7 @@ function bottomNotification(from, target = "", queued=false){
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
         }else if(from == "timeout"){
-            $(".bottomNotification_msg").text("Timeout error");
+            $(".bottomNotification_msg").text("Error : Request Timed out");
         }else if(from == "fillConnect"){
             $(".bottomNotification_msg").text("Fill all entries");
         }else if(from == "notConnected"){
