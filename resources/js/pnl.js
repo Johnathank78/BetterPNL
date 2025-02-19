@@ -663,7 +663,7 @@ function generateAndPushTile(coin){
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${roundNumber(coin.mean_buy} ${short}</span>
+                  <span class="detail_subElem_data mean_buy">${roundNumber(coin.mean_buy)} ${short}</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
