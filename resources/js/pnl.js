@@ -622,6 +622,11 @@ async function refreshData(filter=false){
 
 // ----
 
+function roundNumber(n){
+  n = parsFloat(n);
+  return n >= 10 ? n.toFixed(2) : n.toFixed(5);
+};
+
 function updateGlobalElements(bank, pnl){
   const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
   $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
@@ -649,7 +654,7 @@ function generateAndPushTile(coin){
                   ${coin.asset}
                   <span class="detail_elem_amount">${parseFloat(coin.amount).toFixed(8)}</span>
               </span>
-              <span class="detail_elem_price">${parseFloat(coin.price).toFixed(2)} ${short}</span>
+              <span class="detail_elem_price">${roundNumber(coin.price)} ${short}</span>
           </div>
           <div class="detail_elem_body">
               <div class="detail_subElem">
@@ -658,7 +663,7 @@ function generateAndPushTile(coin){
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${parseFloat(coin.mean_buy).toFixed(2)} ${short}</span>
+                  <span class="detail_subElem_data mean_buy">${roundNumber(coin.mean_buy} ${short}</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
