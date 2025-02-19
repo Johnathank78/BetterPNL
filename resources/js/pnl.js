@@ -15,6 +15,8 @@ jQuery.fn.val = function(){
 
 // GLOBAL VARS
 
+const takerFEE = 0.001;
+const makerFEE = 0.001;
 const isMobile = /Mobi/.test(navigator.userAgent);
 
 const DRAG_THRESHOLD = 15;
@@ -1063,7 +1065,7 @@ function simulatorStyleUpdate(){
 function aimedProfitUpdate(sellPrice){
   if(isNacN(sellPrice)){return ""};
 
-  sellPrice = parseFloat(sellPrice);
+  sellPrice = parseFloat(sellPrice) * (1 - takerFEE);
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
 
   let buyPrice = parseFloat(coin.mean_buy);
@@ -1084,7 +1086,7 @@ function sellPriceUpdate(profit) {
   let amount = parseFloat(coin.amount);
   let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
 
-  let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate);
+  let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate) / (1 - takerFEE);
   return fixNumber(sellPrice, 2, {limit: 10, val: 2});
 };
 
@@ -1099,7 +1101,7 @@ function priceUpdate(mean_buy, quantity) {
   if(isNacN(mean_buy) || isNacN(quantity)){return ""};
 
   mean_buy = parseFloat(mean_buy);
-  quantity = parseFloat(quantity);
+  quantity = parseFloat(quantity) * (1 - makerFEE);
 
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
   let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
@@ -1115,14 +1117,17 @@ function meanBuyUpdate(price, quantity){
   if(isNacN(price) || isNacN(quantity)){return ""};
 
   price = parseFloat(price);
-  quantity = parseFloat(quantity);
+  quantity = parseFloat(quantity) * (1 - makerFEE);
   
   let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
   let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
 
   let pastQuantity = parseFloat(coin.buy_value) * conversionRate;
 
-  let meanBuy = ((pastQuantity * parseFloat(coin.mean_buy)) + (quantity * price)) / (pastQuantity + quantity);
+  let pastAmount = pastQuantity * parseFloat(coin.mean_buy)
+  let currentAmount = quantity * price;
+
+  let meanBuy = ((pastAmount) + (currentAmount)) / (pastQuantity + quantity);
   return fixNumber(meanBuy, 2, {limit: 10, val: 2});
 };
 
