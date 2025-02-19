@@ -570,8 +570,8 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
   }
 
   // 7.6 Statistiques globales finales (les montants sont en USDC)
-  result.global.bank = totalBalanceCurrent.toFixed(2);
-  result.global.pnl = totalPnl >= 0 ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2);
+  result.global.bank = fixNumber(totalBalanceCurrent, 2, {limit: 10, val: 2});
+  result.global.pnl = totalPnl >= 0 ? `+${fixNumber(totalPnl, 2, {limit: 10, val: 2})}` : fixNumber(totalPnl, 2, {limit: 10, val: 2});
   
   coinPrices = cloneOBJ(tempPrices);
 
@@ -622,9 +622,14 @@ async function refreshData(filter=false){
 
 // ----
 
-function roundNumber(n){
+function fixNumber(n, fix, expand = false){
   n = parseFloat(n);
-  return n >= 10 ? n.toFixed(2) : n.toFixed(4);
+  
+  if(expand) fix = Math.abs(n) >= expand.limit ? fix : fix + expand.val;
+
+  let fixed = n.toFixed(fix);
+
+  return Math.abs(Math.floor(fixed)) == Math.abs(Math.ceil(fixed)) ? n.toFixed(2) : fixed;
 };
 
 function updateGlobalElements(bank, pnl){
@@ -641,7 +646,7 @@ function generateAndPushTile(coin){
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
-  const formattedPnl = sign + Math.abs(pnlNumber).toFixed(2);
+  const formattedPnl = sign + fixNumber(Math.abs(pnlNumber), 2) ;
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
   const short = stableCoins[coin.quoteCurrency].short;
@@ -652,22 +657,22 @@ function generateAndPushTile(coin){
           <div class="detail_elem_header">
               <span class="detail_elem_title">
                   ${coin.asset}
-                  <span class="detail_elem_amount">${parseFloat(coin.amount).toFixed(8)}</span>
+                  <span class="detail_elem_amount">${fixNumber(coin.amount, 8)}</span>
               </span>
-              <span class="detail_elem_price">${roundNumber(coin.price)} ${short}</span>
+              <span class="detail_elem_price">${fixNumber(coin.price, 2, {limit: 10, val: 2})} ${short}</span>
           </div>
           <div class="detail_elem_body">
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value">${parseFloat(coin.actual_value).toFixed(2)} $</span>
+                  <span class="detail_subElem_data actual_value">${fixNumber(coin.actual_value, 2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${roundNumber(coin.mean_buy)} ${short}</span>
+                  <span class="detail_subElem_data mean_buy">${fixNumber(coin.mean_buy, 2, {limit: 10, val: 2})} ${short}</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value">${parseFloat(coin.buy_value).toFixed(2)} $</span>
+                  <span class="detail_subElem_data buy_value">${fixNumber(coin.buy_value, 2)} $</span>
               </div>
               <div class="detail_subElem">
                   <span class="detail_subElem_title">ONGOING PNL</span>
@@ -975,24 +980,24 @@ function loadSimulatorData(mode){
   let stableCoin = stableCoins[coin.quoteCurrency];
   let short = stableCoin.short;
     
-  $('.simulator_meanBuy').text(parseFloat(coin.mean_buy).toFixed(2) + short);
+  $('.simulator_meanBuy').text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + short);
 
   if(mode == "buy"){
-    $('.simulator_buyQuant').text(parseFloat(coin.buy_value).toFixed(2) * parseFloat(stableCoin.conversionRate).toFixed(2) + short);
+    $('.simulator_buyQuant').text(fixNumber(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate), 2, {limit: 10, val: 2}) + short);
   }else if(mode == "sell"){
-    $('.simulator_buyQuant').text(parseFloat(coin.buy_value).toFixed(2) + "$");
+    $('.simulator_buyQuant').text(fixNumber(coin.buy_value, 2, {limit: 10, val: 2}) + "$");
   };
   
   $('.currencyPlaceholder').text(short);
   $('#coin_selector').val(focusedCoin);
   
-  let placeholderSellPrice = parseFloat(coin.mean_buy * 1.05).toFixed(2);
+  let placeholderSellPrice = fixNumber(coin.mean_buy * 1.05, 2, {limit: 10, val: 2});
 
   $('#sellPrice').attr('placeholder', placeholderSellPrice);
   $('#aimedProfit').attr('placeholder', aimedProfitUpdate(placeholderSellPrice));
 
-  let placeholderMeanBuyPrice = parseFloat(coin.mean_buy * 0.85).toFixed(2);
-  let pastQuantity = (parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate)).toFixed(2);
+  let placeholderMeanBuyPrice = fixNumber(coin.mean_buy * 0.85, 2, {limit: 10, val: 2});
+  let pastQuantity = fixNumber(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate), 2, {limit: 10, val: 2});
 
   $('#buyQuantity').attr('placeholder', pastQuantity);
   $('#meanBuy').attr('placeholder', placeholderMeanBuyPrice);
@@ -1066,7 +1071,7 @@ function aimedProfitUpdate(sellPrice){
   let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
 
   let profit = ((sellPrice * conversionRate - buyPrice * conversionRate) / (buyPrice * conversionRate)) * amount;
-  return profit.toFixed(2);
+  return fixNumber(profit, 2, {limit: 10, val: 2});
 };
 
 function sellPriceUpdate(profit) {
@@ -1080,7 +1085,7 @@ function sellPriceUpdate(profit) {
   let conversionRate = stableCoins[coin.quoteCurrency].conversionRate || 1;
 
   let sellPrice = ((amount * buyPrice / conversionRate) + profit) / (amount / conversionRate);
-  return sellPrice.toFixed(2);
+  return fixNumber(sellPrice, 2, {limit: 10, val: 2});
 };
 
 // --- BUY --- //
@@ -1103,7 +1108,7 @@ function priceUpdate(mean_buy, quantity) {
   let pastTotalCost = pastQuantity * parseFloat(coin.mean_buy);
 
   let newPrice = ((mean_buy * (pastQuantity + quantity)) - pastTotalCost) / quantity;
-  return newPrice.toFixed(2);
+  return fixNumber(newPrice, 2, {limit: 10, val: 2});
 };
 
 function meanBuyUpdate(price, quantity){
@@ -1118,7 +1123,7 @@ function meanBuyUpdate(price, quantity){
   let pastQuantity = parseFloat(coin.buy_value) * conversionRate;
 
   let meanBuy = ((pastQuantity * parseFloat(coin.mean_buy)) + (quantity * price)) / (pastQuantity + quantity);
-  return meanBuy.toFixed(2);
+  return fixNumber(meanBuy, 2, {limit: 10, val: 2});
 };
 
 // -------
@@ -1309,7 +1314,7 @@ async function pnl(){
 
   $('#putMaxInvest').on('click', function(){
     let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-    let funds = findAvailableFunds(coin.quoteCurrency).toFixed(2);
+    let funds = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {limit: 10, val: 2});
 
     $('#buyQuantity').val(funds);
     $('#buyQuantity').change();
@@ -1317,7 +1322,7 @@ async function pnl(){
 
   $('#actualPrice').on('click', function(){
     let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-    let price = parseFloat(coin.price).toFixed(2);
+    let price = fixNumber(coin.price, 2, {limit: 10, val: 2});
 
     $('#sellPrice').val(price);
     $('#sellPrice').change();
@@ -1396,11 +1401,11 @@ async function pnl(){
     $('#api_key-val').val(API['API']);
     $('#api_secret-val').val(API['SECRET']);
     
-    // autoRefreshSet(params['autoRefresh']);
-    // getDataAndDisplay(false);
+    autoRefreshSet(params['autoRefresh']);
+    getDataAndDisplay(false);
 
-    walletData = oldWalletData;
-    displayNewData(walletData);
+    // walletData = oldWalletData;
+    // displayNewData(walletData);
   }else{
     initDOMupdate(false);
   };
