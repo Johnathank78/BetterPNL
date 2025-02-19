@@ -623,8 +623,8 @@ async function refreshData(filter=false){
 // ----
 
 function roundNumber(n){
-  n = parsFloat(n);
-  return n >= 10 ? n.toFixed(2) : n.toFixed(5);
+  n = parseFloat(n);
+  return n >= 10 ? n.toFixed(2) : n.toFixed(4);
 };
 
 function updateGlobalElements(bank, pnl){
