@@ -328,7 +328,7 @@ body{
     pointer-events: none;
 }
 
-#putMaxInvest, #currentPrice, #actualPrice{
+#putMaxInvest, #currentPrice, #actualPrice, #zero{
     position: absolute;
     font-size: 12px;
 
