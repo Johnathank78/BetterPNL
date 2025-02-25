@@ -204,16 +204,16 @@ function params_read(){
   let data = localStorage.getItem("params");
 
   if(data === null || data == ""){
-    $("#sortingVar").val("Name");
-    $("#sortingWay").val("Asc");
+    $("#sortingVar").val("NAME");
+    $("#sortingWay").val("ASC");
     $('.refreshTiming').val(120);
 
     return {
         "autoRefresh": false,
         "refreshTime": 120,
         "filter": {
-          "var": "Name",
-          "way": "Asc"
+          "var": "NAME",
+          "way": "ASC"
         }
     };
   }else{ 
@@ -349,24 +349,27 @@ async function getUserData(){
 // DATA PROCESSING
 
 function filterWalletData(data){
-  const mode = params['filter']['var'];  // "Name" | "PNL" | "Amount" (example)
-  const way = params['filter']['way'];   // "ASC" | "DESC"
+  const mode = params['filter']['var'];
+  const way = params['filter']['way']; 
+
+  let wallet = cloneOBJ(data);
+  wallet.coins = wallet.coins.filter(coin => !stableCoins.hasOwnProperty(coin.asset.toUpperCase()));
   
-  data.coins.sort((a, b) => {
+  wallet.coins.sort((a, b) => {
     switch (mode) {
-      case "Name": {
-        // Sort by asset name (string comparison)
+      case "NAME": {
         return a.asset.localeCompare(b.asset);
       }
       case "PNL": {
-        // ongoing_pnl might be "+10" or "10" or "-50", so parseFloat is safe
         const pnlA = parseFloat(a.ongoing_pnl);
         const pnlB = parseFloat(b.ongoing_pnl);
+
         return pnlA - pnlB;
       }
-      case "Amount": {
+      case "AMOUNT": {
         const amtA = parseFloat(a.actual_value);
         const amtB = parseFloat(b.actual_value);
+
         return amtA - amtB;
       }
       default:
@@ -374,12 +377,11 @@ function filterWalletData(data){
     }
   });
 
-  // If the user wants descending order, just reverse
-  if (way === "Desc") {
-    data.coins.reverse();
+  if (way === "DESC") {
+    wallet.coins.reverse();
   }
 
-  return data; 
+  return wallet; 
 };
 
 function computeAveragePrice(trades){
@@ -554,7 +556,7 @@ async function fetchAndComputePortfolio(apiKey, apiSecret) {
       pnl = 0;
     }
 
-    if (currentValue < 1 && purchaseValue < 1) continue;
+    if (currentValue < 5 && purchaseValue < 5) continue;
 
     totalBalanceCurrent += currentValue;
     totalPnl += pnl;
@@ -607,7 +609,7 @@ function displayNewData(walletData){
   if(API['API'] == "noData" || walletData == false){return};
 
   updateGlobalElements(walletData.global.bank, walletData.global.pnl);
-  filterWalletData(walletData).coins.forEach(function(coin) {
+  filterWalletData(walletData).coins.forEach(function(coin){
     if(!stableCoins.hasOwnProperty(coin.asset.toUpperCase())){
       generateAndPushTile(coin);
     };
@@ -642,6 +644,18 @@ function updateGlobalElements(bank, pnl){
   $('.pnl_data').css('color', pnlColor)
 };
 
+function getCoinProportion(coin){
+  let total_value = 0;
+
+  walletData.coins.forEach(alt_coin => {
+    if(!stableCoins.hasOwnProperty(alt_coin.asset.toUpperCase())){
+      total_value += alt_coin.buy_value;
+    };
+  });
+
+  return Math.round((coin.buy_value / total_value) * 100);
+};
+
 function generateAndPushTile(coin){
   // Convert the PnL to a number
   const pnlNumber = parseFloat(coin.ongoing_pnl);
@@ -653,13 +667,15 @@ function generateAndPushTile(coin){
 
   const short = stableCoins[coin.quoteCurrency].short;
 
+  const prop = getCoinProportion(coin);
+
   // Build the HTML using a template literal
   const tileHtml = `
       <div class="detail_elem">
           <div class="detail_elem_header">
               <span class="detail_elem_title">
                   ${coin.asset}
-                  <span class="detail_elem_amount">${fixNumber(coin.amount, 8)}</span>
+                  <span class="detail_elem_amount">${fixNumber(coin.amount, 8) + " | " + prop + "%"}</span>
               </span>
               <span class="detail_elem_price">${fixNumber(coin.price, 2, {limit: 10, val: 2})} ${short}</span>
           </div>
@@ -1331,6 +1347,13 @@ async function pnl(){
 
     $('#sellPrice').val(price);
     $('#sellPrice').change();
+  });
+
+  $('#zero').on('click', function(){
+    $('#aimedProfit').val(0);
+    $('#sellPrice').val(sellPriceUpdate(0));
+
+    $('#aimedProfit').change();
   });
 
   $('#currentPrice').on('click', function(){
