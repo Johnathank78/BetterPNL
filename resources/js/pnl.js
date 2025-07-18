@@ -636,6 +636,29 @@ function fixNumber(n, fix, expand = false){
   return Math.abs(Math.floor(fixed)) == Math.abs(Math.ceil(fixed)) ? n.toFixed(2) : fixed;
 };
 
+function fixNumberBis(n, fix) {
+  n = parseFloat(n);
+  if (isNaN(n)) return "NaN";
+
+  const [intPart, decPart = ""] = Math.abs(n).toString().split(".");
+  const intLength = intPart.length;
+
+  let decimals = Math.max(0, fix - intLength);
+
+  let rounded = Math.abs(n).toFixed(decimals);
+
+  if (decimals > 0) {
+    let [, rDec = ""] = rounded.split(".");
+    let missingZeros = decimals - rDec.length;
+    if (missingZeros > 0) {
+      rounded += "0".repeat(missingZeros);
+    }
+  }
+
+  return n < 0 ? "-" + rounded : rounded;
+}
+
+
 function updateGlobalElements(bank, pnl){
   const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
   $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
@@ -675,7 +698,7 @@ function generateAndPushTile(coin){
           <div class="detail_elem_header">
               <span class="detail_elem_title">
                   ${coin.asset}
-                  <span class="detail_elem_amount">${fixNumber(coin.amount, 8) + " | " + prop + "%"}</span>
+                  <span class="detail_elem_amount">${fixNumberBis(coin.amount, 10) + " | " + prop + "%"}</span>
               </span>
               <span class="detail_elem_price">${fixNumber(coin.price, 2, {limit: 10, val: 2})} ${short}</span>
           </div>
