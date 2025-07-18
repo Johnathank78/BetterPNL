@@ -478,6 +478,8 @@ body{
 }
 
 .elem_data{
+    text-align: left;
+    min-width: 120px;
     font-size: 25px;
 }
 
@@ -795,11 +797,10 @@ body{
 
 .skeleton {
     /* We need some fixed dimensions or min-dimensions so the skeleton is visible */
-    min-width: 120px;      /* adjust as needed */
     min-height: 1em;
     border-radius: 5px;
     background: #ccc;      /* base gray background */
-    color: transparent;    /* hide the actual text */
+    color: transparent !important;    /* hide the actual text */
     position: relative;
     overflow: hidden;      /* so the shimmer doesn't overflow edges */
     opacity: 0.1;          /* overall opacity for the skeleton block */
