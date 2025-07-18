@@ -197,7 +197,7 @@ function old_save(data){
 };
 
 function api_delete(){
-localStorage.removeItem("api");
+  localStorage.removeItem("api");
 };
 
 function params_read(){
@@ -228,8 +228,8 @@ function params_read(){
 }
 
 function params_save(data){
-localStorage.setItem("params", JSON.stringify(data));
-return;
+  localStorage.setItem("params", JSON.stringify(data));
+  return;
 };
 
 function autoRefreshSet(activated){
@@ -757,7 +757,6 @@ function clearData(disconnect){
 function fetchStyleUpdate(fetching, refresh=false){
   if(fetching){
     $('.detail_connect').css('display', 'none');
-    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').text('');
     $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
 
     if(!refresh){
@@ -896,6 +895,9 @@ function isApop(walletData, oldWalletData){
   const currentPNL = parseFloat(walletData.global.pnl);
   const oldPNL = parseFloat(oldWalletData.global.pnl); // Ensure oldPNL is a number
 
+  const currentBank = parseFloat(walletData.global.bank);
+  const oldBank = parseFloat(oldWalletData.global.bank);
+
   if(isNacN(currentPNL) || isNacN(oldPNL)){
     console.error("Invalid PNL values.");
     return;
@@ -907,6 +909,7 @@ function isApop(walletData, oldWalletData){
   if (percentageChange >= 4.5) {
     showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+Math.abs(percentageChange).toFixed(2).toString()+"% | +"+ Math.abs(difference).toFixed(2).toString()+"$"});
   } else if (percentageChange <= -3.5) {
+    if (Math.abs(currentBank - oldBank) < 0.5) return;
     showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+Math.abs(percentageChange).toFixed(2).toString()+"% | -"+ Math.abs(difference).toFixed(2).toString()+"$"});
   };
 
