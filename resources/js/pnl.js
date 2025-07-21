@@ -4,7 +4,7 @@
 // ------------------------------------------------------
 // CONFIG & GLOBALS
 // ------------------------------------------------------
-const WORKER_URL    = "https://shy-haze-8be4.better-pnl.workers.dev";
+const WORKER_URL    = "https://johnathan-denobetterp-43.deno.dev";
 const PUB_WS        = "wss://stream.binance.com:9443/stream";
 const USER_WS       = "wss://stream.binance.com:9443/ws";
 
