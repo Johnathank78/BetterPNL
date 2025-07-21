@@ -919,15 +919,7 @@ function recomputePortfolio() {
   let coins = [], bank = 0, pnlSum = 0;
 
   Object.entries(positions).forEach(([asset, pos]) => {
-
-    if (asset === "USDC") {
-      const conversionRate = stableCoins[asset].conversionRate || 1;
-      const curVal = pos.qty * conversionRate;
-      bank += curVal;
-      return;
-    }
-
-    if (asset.endsWith("USDC")) return;
+    if (asset.endsWith("USDC") && asset != "USDC") return;
 
     if (pos.qty * pos.cost <= 0.5 && !stableCoins.hasOwnProperty(asset)) return;
 
