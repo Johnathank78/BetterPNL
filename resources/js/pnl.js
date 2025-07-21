@@ -1,146 +1,108 @@
-// METHODS
-var originalVal = $.fn.val;
+// binance-realtime-full.js
+// Full client-side script: original functions + real-time integration
 
-jQuery.fn.getStyleValue = function(prop){
-  return parseFloat($(this).css(prop).replace('px', ''));
-};
+// ------------------------------------------------------
+// CONFIG & GLOBALS
+// ------------------------------------------------------
+const WORKER_URL    = "https://shy-haze-8be4.better-pnl.workers.dev";
+const PUB_WS        = "wss://stream.binance.com:9443/stream";
+const USER_WS       = "wss://stream.binance.com:9443/ws";
 
-jQuery.fn.val = function(){
-  var result = originalVal.apply(this, arguments);
-  if(this.hasClass('resizingInp')){
-      resizeInput(this[0]);
-  };
-  return result;
-};
+let priceWs = null, userWs = null;
 
-// GLOBAL VARS
-
-const takerFEE = 0.001;
-const makerFEE = 0.001;
+// FEEs, UI flags, timeouts, data holders
+const takerFEE = 0.001, makerFEE = 0.001;
 const isMobile = /Mobi/.test(navigator.userAgent);
+const DRAG_THRESHOLD = 15, MAX_PULL = 30;
 
-const DRAG_THRESHOLD = 15;
-const MAX_PULL = 30;
-
-let isBacking = false;
-var backerY = 0;
-var backerX = 0;
-
-var current_page = "app";
-var current_simulator_mode = "sell";
-
-var walletData = false;
-var oldWalletData = false;
-
-var API = false;
-var params = false;
-var isFetching = false;
-var isLogged = false;
-var firstLog = true;
-
-var focusedCoin = false;
-
+var isBacking = false, backerX = 0, backerY = 0;
+var current_page = "app", current_simulator_mode = "sell";
+var walletData = false, oldWalletData = false;
+var API = false, params = false;
+var isLogged = false
 var haveWebNotificationsBeenAccepted = false;
-var refreshTimeout = null;
-var longClickTS = false;
+var focusedCoin = false, coinPrices = false;
+var firstLog = true;
+var fullyLoaded = false;
+
+var positions = {};
+walletData = { coins: [], global: { bank:0, pnl:0 } };
+coinPrices = coinPrices || {};
 
 const stableCoins = {
-  "USDC": {
-    label: "USDC",
-    short: '$',
-    conversionRate: 1
-  },
-
-  "TRY": {
-    label: "TRY",
-    short: '₺',
-    conversionRate: null
-  },
-
-  "EUR": {
-    label: "EUR",
-    short: '€',
-    conversionRate: null
-  }
+  "USDC": { label:"USDC", short:'$', conversionRate:1 },
+  "TRY":  { label:"TRY",  short:'₺', conversionRate:null },
+  "EUR":  { label:"EUR",  short:'€', conversionRate:null }
 };
 
-var coinPrices = false;
+// ------------------------------------------------------
+// 1) STORAGE & PARAMS
+// ------------------------------------------------------
+function api_read(){
+  let d = localStorage.getItem("api");
+  if(!d){ isLogged=false; return {"API":"noData","SECRET":"noData"}; }
+  isLogged=true; return JSON.parse(d);
+}
+function api_save(data){ localStorage.setItem("api",JSON.stringify(data)); }
+function api_delete(){ localStorage.removeItem("api"); }
 
-// UTILITY
+function old_read(){
+  let d = localStorage.getItem("oldWallet");
+  if(!d) return false;
+  return JSON.parse(d);
+}
+function old_save(d){ localStorage.setItem("oldWallet",JSON.stringify(d)); }
 
-function findDifferentCharacter(str1, str2) {
-  if(str1.length >= str2.length){return};
-
-  for (let i = 0; i < str2.length; i++) {
-      if (str1[i] !== str2[i]) {
-          return {
-              value: str2[i],
-              position: i
-          };
-      };
-  };
-
-  return false;
-};
-
-function isNacN(input) {
-  if (typeof input === 'number') {
-      input = input.toString();
-  } else if (typeof input !== 'string') {
-      return true;
+function params_read(){
+  let d = localStorage.getItem("params");
+  if(!d){
+    params = { filter:{var:"NAME",way:"ASC"} };
+    $("#sortingVar").val("NAME"); $("#sortingWay").val("ASC");
+    return params;
   }
+  params = JSON.parse(d);
+  $("#sortingVar").val(params.filter.var);
+  $("#sortingWay").val(params.filter.way);
+  return params;
+}
+function params_save(d){ localStorage.setItem("params",JSON.stringify(d)); }
+
+// ------------------------------------------------------
+// 2) UTILITIES
+// ------------------------------------------------------
+function cloneOBJ(o){ return JSON.parse(JSON.stringify(o)); }
+
+function fixNumber(n, fix, expand){
+  n = parseFloat(n);
+  if(expand){ fix = Math.abs(n)>=expand.limit?fix:fix+expand.val; }
+  let f = n.toFixed(fix);
+  return Math.abs(Math.floor(f))==Math.abs(Math.ceil(f))
+    ? n.toFixed(2):f;
+}
+function fixNumberBis(n, fix) {
+  n = parseFloat(n);
+  if(isNaN(n)) return "NaN";
+  const [i,d=""] = Math.abs(n).toString().split(".");
+  const dec = Math.max(0, fix - i.length);
+  let r = Math.abs(n).toFixed(dec);
+  if(dec>0){ const [, rd=""] = r.split("."); r += "0".repeat(dec - rd.length); }
+  return n<0?"-"+r:r;
+}
+
+function isNacN(input){
+  if(typeof input==='number') input=input.toString();
   return !/^-?\d*\.?\d+$/.test(input);
 }
 
 function getObjectKeyIndex(obj, key, val){
-  for (let ind = 0; ind < obj.length; ind++) {
-    const el = obj[ind];
-
-    if(el[key] == val){
-      return ind;
-    };
-  };
-
-  return -1
-};
+  for(let i=0;i<obj.length;i++){ if(obj[i][key]==val) return i; }
+  return -1;
+}
 
 function showBlurPage(className){
   $(".blurBG").children(':not(.'+className+')').css('display', 'none');
   $('.'+className+'').css("display", 'flex');
   $(".blurBG").css("display", "flex");
-};
-
-function randomiseDelay(delay, randomOffsetPercentage, canGoLower = true){
-
-  let offset;
-  let randomAmount = Math.max(2, Math.floor(delay * randomOffsetPercentage));
-  
-  if(canGoLower){
-    offset = Math.floor(Math.random() * (randomAmount * 2 + 1)) - randomAmount;
-  }else{
-    offset = Math.floor(Math.random() * (randomAmount + 1));
-  };
-
-  return Math.max(1, (delay + offset) * 1000);
-};
-
-function startTimeout(time) {
-  const adjustedTime = randomiseDelay(time, 0.15)
-
-  refreshTimeout = setTimeout(() => {
-    if(!isFetching && isLogged){
-      refreshData();
-    }
-  }, adjustedTime);
-}
-
-function stopTimeout(){
-  clearTimeout(refreshTimeout);
-  refreshTimeout = null;
-};
-
-function cloneOBJ(obj){
-  return JSON.parse(JSON.stringify(obj));
 };
 
 function resizeInput(input){
@@ -155,198 +117,48 @@ function resizeInput(input){
 	};
 };
 
-// STORED DATA
-
-function api_read(){
-  let data = localStorage.getItem("api");
-
-  if(data === null || data == ""){
-      isLogged = false;
-      
-      return {
-          "API": "noData",
-          "SECRET": "noData"
-      };
-  }else{ 
-      data = JSON.parse(data);
-      isLogged = true;
-
-      return data;
-  };
-};
-
-function api_save(data){
-  localStorage.setItem("api", JSON.stringify(data));
-  return;
-};
-
-function old_read(){
-  let data = localStorage.getItem("oldWallet");
-
-  if(data === null || data == ""){
-      return false;
-  }else{ 
-      data = JSON.parse(data);
-      return data;
-  };
-};
-
-function old_save(data){
-  localStorage.setItem("oldWallet", JSON.stringify(data));
-  return;
-};
-
-function api_delete(){
-  localStorage.removeItem("api");
-};
-
-function params_read(){
-  let data = localStorage.getItem("params");
-
-  if(data === null || data == ""){
-    $("#sortingVar").val("NAME");
-    $("#sortingWay").val("ASC");
-    $('.refreshTiming').val(120);
-
-    return {
-        "autoRefresh": false,
-        "refreshTime": 120,
-        "filter": {
-          "var": "NAME",
-          "way": "ASC"
-        }
-    };
-  }else{ 
-    data = JSON.parse(data);
-
-    $('.refreshTiming').val(data['refreshTime']);
-    $("#sortingVar").val(data['filter']['var']);
-    $("#sortingWay").val(data['filter']['way']);
-  };
-
-  return data;
+// ------------------------------------------------------
+// 3) FETCH + HMAC + WORKER PROXY
+// ------------------------------------------------------
+async function signHmacSha256(qs, secret){
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw",enc.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const sig = await crypto.subtle.sign("HMAC",key,enc.encode(qs));
+  return [...new Uint8Array(sig)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 
-function params_save(data){
-  localStorage.setItem("params", JSON.stringify(data));
-  return;
-};
+async function fetchJSON(url,opts){ const r=await fetch(url,opts); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
 
-function autoRefreshSet(activated){
-  if(!activated){
-    $('.autoRefreshing').css({
-      'backgroundColor': 'var(--light-color)',
-      'color': 'white'
-    });
-
-    stopTimeout();
-  }else{
-    $('.autoRefreshing').css({
-      'backgroundColor': 'var(--yellow)',
-      'color': 'black'
-    });
-
-    startTimeout(params['refreshTime']);
-  };
-};
-
-// DATA FETCH 
-
-async function fetchWithTimeout(url, options, timeout=10000) {
-  return Promise.race([
-    fetch(url, options),
-    new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Request timed out")), timeout)
-    )
-  ]);
+async function proxySigned(apiKey, endpoint, queryString){
+  return fetchJSON(`${WORKER_URL}/proxySigned`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,endpoint,queryString})});
 }
 
-async function signHmacSha256(queryString, secret) {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const msgData = encoder.encode(queryString);
-  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
-  const signatureBytes = new Uint8Array(signatureBuffer);
-  return Array.from(signatureBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+// ------------------------------------------------------
+// 4) PUBLIC & PRIVATE WEBSOCKETS
+// ------------------------------------------------------
+function connectPriceWS(assets, onPrice){
+  if(priceWs) priceWs.close(); if(!assets.length) return;
+  const streams=assets.map(a=>a.toLowerCase()+"usdc@ticker").join("/");
+  priceWs=new WebSocket(`${PUB_WS}?streams=${streams}`);
+  priceWs.onmessage=e=>{ const {data}=JSON.parse(e.data); onPrice(data.s,parseFloat(data.c)); };
+  priceWs.onerror=console.error; priceWs.onclose=()=>console.warn("Public WS closed");
 }
 
-async function callBinanceProxy(apiKey, endpoint, queryString, first=false) {
-  const payload = { apiKey, endpoint, queryString };
+async function createListenKey(apiKey){ return fetchJSON(`${WORKER_URL}/listenKey`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey})}).then(x=>x.listenKey);}    
 
-  try {
-    var response = await fetchWithTimeout("https://betterpnl-api.onrender.com/proxySigned", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }, randomiseDelay(8.5, 0.05));
-  
-    if(!response.ok && first) throw new Error("failed");
-    
-    if(first && firstLog){
-      firstLog = false;
-      bottomNotification("connected");
-    };
-  
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-  
-    return data;
-  } catch (error) {
-    if(error.message == "Request timed out"){
-      bottomNotification("timeout");
-    }else{
-      bottomNotification("fetchError", response.status);
-    };
+async function keepAliveKey(apiKey,lk){ return fetchJSON(`${WORKER_URL}/listenKey`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,listenKey:lk})}); }
 
-    clearData();
-  };
-};
-
-async function getAccountInfo(apiKey, apiSecret) {
-  const timestamp = Date.now();
-  let queryString = `timestamp=${timestamp}`;
-  const signature = await signHmacSha256(queryString, apiSecret);
-  queryString += `&signature=${signature}`;
-
-  const output = await callBinanceProxy(apiKey, "/api/v3/account", queryString, true);
-  return output
+async function connectUserWS(apiKey,handlers){
+  if(userWs) userWs.close(); const lk=await createListenKey(apiKey);
+  userWs=new WebSocket(`${USER_WS}/${lk}`);
+  userWs.onmessage=e=>{ const msg=JSON.parse(e.data); switch(msg.e){ case"outboundAccountPosition":handlers.onBalances(msg.B);break; case"executionReport":handlers.onOrderUpdate(msg);break; case"balanceUpdate":handlers.onBalanceUpdate(msg);break; default:console.debug(msg);} };
+  userWs.onerror=console.error; userWs.onclose=()=>console.warn("User WS closed");
+  setInterval(()=>keepAliveKey(apiKey,lk),30*60*1000);
 }
 
-async function getMyTrades(apiKey, apiSecret, symbol) {
-  const timestamp = Date.now();
-  let queryString = `symbol=${symbol}&timestamp=${timestamp}`;
-  const signature = await signHmacSha256(queryString, apiSecret);
-  queryString += `&signature=${signature}`;
-
-  const output = await callBinanceProxy(apiKey, "/api/v3/myTrades", queryString);
-  return output;
-};
-
-async function getSymbolPrice(symbol){
-  // Let's try direct fetch (public endpoint).
-  // If CORS blocks it, do the same "proxy" approach
-  const url = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-  const resp = await fetch(url);
-
-  if (!resp.ok) {
-    throw new Error(`Error fetching ticker for ${symbol}: ${resp.status}`);
-  }
-  return resp.json();
-};
-
-async function getUserData(){
-  isFetching = true
-
-  let walletData = await fetchAndComputePortfolio(API['API'], API['SECRET']);
-  if(haveWebNotificationsBeenAccepted && oldWalletData){isApop(walletData, oldWalletData)};
-
-  isFetching = false;
-
-  return walletData;
-};
-
-// DATA PROCESSING
+// ------------------------------------------------------
+// 5) ORIGINAL DATA-PROCESSING & DISPLAY
+// ------------------------------------------------------
 
 function filterWalletData(data){
   const mode = params['filter']['var'];
@@ -443,221 +255,24 @@ function filterHoldings(walletData, coinPrices, balances){
   });
 };
 
-async function fetchAndComputePortfolio(apiKey, apiSecret) {
-  var balances;
-  let totalBalanceCurrent = 0;
-  let totalPnl = 0;
-
-  const result = {
-    global: { bank: 0, pnl: 0 },
-    coins: []
-  };
-
-  var tempPrices = coinPrices ? coinPrices : {"USDC": 1};
-
-  // Récupération des informations de compte (tableau des balances)
-  const accountInfo = await getAccountInfo(apiKey, apiSecret);
-
-  if(oldWalletData){
-    balances = filterHoldings(oldWalletData, coinPrices ,accountInfo.balances);
-  }else{
-    balances = accountInfo.balances;
-  };
-
-  // Parcours de chaque balance
-  for (const balance of balances) {
-    const asset = balance.asset;
-    const free = parseFloat(balance.free);
-    const locked = parseFloat(balance.locked);
-    const quantity = free + locked;
-
-    // Ignorer si la quantité totale est nulle ou négative
-    if (quantity <= 0) continue;
-
-    // 1. Traitement des stable coins
-    if (stableCoins.hasOwnProperty(asset.toUpperCase())){
-      const stableCoin = stableCoins[asset.toUpperCase()];
-
-      if(stableCoin.label == "USDC"){
-        result.coins.push({
-          asset: asset,
-          amount: quantity
-        });
-        
-        totalBalanceCurrent += quantity / stableCoin.conversionRate;
-      }else{
-        try{
-          const tickerData = await getSymbolPrice("USDC" + stableCoin.label);
-          stableCoin.conversionRate = parseFloat(tickerData.price);
-
-          tempPrices[stableCoin.label] = tickerData.price;
-          
-          result.coins.push({
-            asset: asset,
-            amount: quantity
-          });
-
-          totalBalanceCurrent += quantity / stableCoin.conversionRate;
-        }catch (e){
-          continue;
-        }
-      };
-
-      continue;
-    }
-
-    // 2. Traitement des autres actifs
-    let trades = [];
-    let symbolFound = null;
-    let detectedStable = null;
-
-    // On teste chaque paire possible avec les stable coins définis
-    for (const stable in stableCoins) {
-      const symbolCandidate = asset + stable;
-      
-      try {
-        trades = await getMyTrades(apiKey, apiSecret, symbolCandidate);
-        symbolFound = symbolCandidate;
-        detectedStable = stable;
-
-        break;
-      } catch (e) {
-        continue;
-      }
-    }
-
-    if (!symbolFound) continue;
-
-    // 7.3 Calcul du prix moyen d'achat à partir des trades récupérés
-    const avgPrice = computeAveragePrice(trades);
-
-    // 7.4 Récupération du prix actuel via l'endpoint public pour la paire trouvée
-    let currentPrice = null;
-    let currentValue = 0;
-    try {
-      const tickerData = await getSymbolPrice(symbolFound);
-      currentPrice = parseFloat(tickerData.price);
-
-      tempPrices[asset] = tickerData.price;
-
-      currentValue = quantity * currentPrice / stableCoins[detectedStable].conversionRate;
-    } catch (e) {
-      currentPrice = null;
-    }
-
-    // 7.5 Calcul de la valeur d'achat et du PnL
-    let purchaseValue = 0;
-    let pnl = 0;
-    if(avgPrice !== null) {
-      purchaseValue = quantity * avgPrice / stableCoins[detectedStable].conversionRate;
-      pnl = currentValue - purchaseValue;
-    }else{
-      purchaseValue = currentValue;
-      pnl = 0;
-    }
-
-    if (currentValue < 5 && purchaseValue < 5) continue;
-
-    totalBalanceCurrent += currentValue;
-    totalPnl += pnl;
-
-    result.coins.push({
-      asset: asset,
-      amount: quantity,
-      price: currentPrice ? currentPrice : "N/A",
-      actual_value: currentValue,
-      buy_value: purchaseValue,
-      mean_buy: avgPrice ? avgPrice : "N/A",
-      ongoing_pnl: pnl >= 0 ? `+${pnl}` : pnl,
-      quoteCurrency: stableCoins[detectedStable].label
-    });
-  }
-
-  // 7.6 Statistiques globales finales (les montants sont en USDC)
-  result.global.bank = fixNumber(totalBalanceCurrent, 2, {limit: 10, val: 2});
-  result.global.pnl = totalPnl >= 0 ? `+${fixNumber(totalPnl, 2, {limit: 10, val: 2})}` : fixNumber(totalPnl, 2, {limit: 10, val: 2});
-  
-  coinPrices = cloneOBJ(tempPrices);
-
-  return result;
-};
-
-
-//  DISPLAY DATA
-
-async function getDataAndDisplay(refresh=false) {
-  if(isLogged){
-    if(params['autoRefresh']){stopTimeout()};
-
-    fetchStyleUpdate(true, refresh);
-    walletData = await getUserData();
-
-    oldWalletData = cloneOBJ(walletData);
-    old_save(oldWalletData);
-
-    if(params['autoRefresh']){startTimeout(params['refreshTime'])};
-
-    $('.refresh').text("REFRESH");
-    displayNewData(walletData);
-    fetchStyleUpdate(false);
-  };
-};
-
 function displayNewData(walletData){
-  $('.detail_elem_wrapper').children().not('.detail_connect').remove();
-
   if(API['API'] == "noData" || walletData == false){return};
 
   updateGlobalElements(walletData.global.bank, walletData.global.pnl);
-  filterWalletData(walletData).coins.forEach(function(coin){
+
+  let filteredData = filterWalletData(walletData);
+
+  $('.detail_elem_wrapper').find('.detail_elem').filter((_, el) => {
+    const assetName = $(el).find(".detail_elem_name").text();
+    return !filteredData.coins.some(coin => coin.asset === assetName);
+  }).remove();
+
+  filteredData.coins.forEach(function(coin){
     if(!stableCoins.hasOwnProperty(coin.asset.toUpperCase())){
       generateAndPushTile(coin);
     };
   });
 };
-
-async function refreshData(filter=false){
-  if(filter){
-    displayNewData(walletData)
-  }else{
-    getDataAndDisplay(true);
-  };
-};
-
-// ----
-
-function fixNumber(n, fix, expand = false){
-  n = parseFloat(n);
-  
-  if(expand) fix = Math.abs(n) >= expand.limit ? fix : fix + expand.val;
-
-  let fixed = n.toFixed(fix);
-
-  return Math.abs(Math.floor(fixed)) == Math.abs(Math.ceil(fixed)) ? n.toFixed(2) : fixed;
-};
-
-function fixNumberBis(n, fix) {
-  n = parseFloat(n);
-  if (isNaN(n)) return "NaN";
-
-  const [intPart, decPart = ""] = Math.abs(n).toString().split(".");
-  const intLength = intPart.length;
-
-  let decimals = Math.max(0, fix - intLength);
-
-  let rounded = Math.abs(n).toFixed(decimals);
-
-  if (decimals > 0) {
-    let [, rDec = ""] = rounded.split(".");
-    let missingZeros = decimals - rDec.length;
-    if (missingZeros > 0) {
-      rounded += "0".repeat(missingZeros);
-    }
-  }
-
-  return n < 0 ? "-" + rounded : rounded;
-}
-
 
 function updateGlobalElements(bank, pnl){
   const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
@@ -691,46 +306,75 @@ function generateAndPushTile(coin){
   const short = stableCoins[coin.quoteCurrency].short;
 
   const prop = getCoinProportion(coin);
-
+  let isskeleton = fullyLoaded ? "" : "skeleton"
+  
   // Build the HTML using a template literal
-  const tileHtml = `
-      <div class="detail_elem">
-          <div class="detail_elem_header">
-              <span class="detail_elem_title">
-                  ${coin.asset}
-                  <span class="detail_elem_amount">${fixNumberBis(coin.amount, 10) + " | " + prop + "%"}</span>
-              </span>
-              <span class="detail_elem_price">${fixNumber(coin.price, 2, {limit: 10, val: 2})} ${short}</span>
-          </div>
-          <div class="detail_elem_body">
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value">${fixNumber(coin.actual_value, 2)} $</span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy">${fixNumber(coin.mean_buy, 2, {limit: 10, val: 2})} ${short}</span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value">${fixNumber(coin.buy_value, 2)} $</span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">ONGOING PNL</span>
-                  <span class="detail_subElem_data pnl_data" style="color: ${pnlColor};">${formattedPnl} $</span>
-              </div>
-          </div>
-      </div>
-  `;
 
-  // Append the generated tile to the container with class ".detail_elem_wrapper"
-  $('.detail_elem_wrapper').append(tileHtml);
+  var tileHtml = false;
+  let focusedTile = $('.detail_elem_wrapper').find('.detail_elem').filter((_, el) => $(el).find(".detail_elem_name").text() == coin.asset);
+
+  if(focusedTile.length == 1){
+    tileHtml = focusedTile.eq(0);
+
+    $(tileHtml).find(".detail_elem_name").text(coin.asset);
+    $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
+    $(tileHtml).find(".detail_elem_price").text(fixNumber(coin.price, 2, {limit: 10, val: 2}) + " " + short);
+
+    $(tileHtml).find(".actual_value").text(fixNumber(coin.actual_value, 2) + " " + "$");
+    $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
+    $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
+
+    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + "$");
+    $(tileHtml).find(".pnl_data").css('color', pnlColor);
+  }else{
+    tileHtml = $(`
+        <div class="detail_elem `+isskeleton+`">
+            <div class="detail_elem_header">
+                <span class="detail_elem_title">
+                    <span class="detail_elem_name"></span>
+                    <span class="detail_elem_amount"></span>
+                </span>
+                <span class="detail_elem_price"></span>
+            </div>
+            <div class="detail_elem_body">
+                <div class="detail_subElem">
+                    <span class="detail_subElem_title">ACTUAL VALUE</span>
+                    <span class="detail_subElem_data actual_value"></span>
+                </div>
+                <div class="detail_subElem">
+                    <span class="detail_subElem_title">MEAN BUY</span>
+                    <span class="detail_subElem_data mean_buy"></span>
+                </div>
+                <div class="detail_subElem">
+                    <span class="detail_subElem_title">BUY VALUE</span>
+                    <span class="detail_subElem_data buy_value"></span>
+                </div>
+                <div class="detail_subElem">
+                    <span class="detail_subElem_title">ONGOING PNL</span>
+                    <span class="detail_subElem_data pnl_data"></span>
+                </div>
+            </div>
+        </div>
+    `)
+
+    $(tileHtml).find(".detail_elem_name").text(coin.asset);
+    $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
+    $(tileHtml).find(".detail_elem_price").text(fixNumber(coin.price, 2, {limit: 10, val: 2}) + " " + short);
+
+    $(tileHtml).find(".actual_value").text(fixNumber(coin.actual_value, 2) + " " + "$");
+    $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
+    $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
+
+    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + "$");
+    $(tileHtml).find(".pnl_data").css('color', pnlColor);
+  };  
+
+  if(!focusedTile.length == 1){
+    $('.detail_elem_wrapper').append(tileHtml);
+  }
 };
 
 function disconnect(){
-  params['autoRefresh'] = false;
-  autoRefreshSet(false);
-
   API = {
     "API": "noData",
     "SECRET": "noData"
@@ -741,6 +385,8 @@ function disconnect(){
   bottomNotification("deleteUser");
 
   isLogged = false;
+  firstLog = false;
+  fullyLoaded = false;
 
   $('#api_key-val').val("");
   $('#api_secret-val').val("");
@@ -749,14 +395,13 @@ function disconnect(){
 };
 
 function clearData(disconnect){
-  isFetching = false;
-
   if(oldWalletData && !disconnect){
     fetchStyleUpdate(false);
     $('.refresh').text("RETRY");
 
     walletData = cloneOBJ(oldWalletData);
     displayNewData(walletData);
+    fetchStyleUpdate(false);
   }else{
     $('.detail_elem_wrapper').children().not('.detail_connect').remove();
     $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
@@ -780,12 +425,12 @@ function clearData(disconnect){
 function fetchStyleUpdate(fetching, refresh=false){
   if(fetching){
     $('.detail_connect').css('display', 'none');
-    $('.detail_subElem_data:not(.mean_buy, .buy_value), .detail_elem_price, .elem_data').addClass('skeleton');
+    $('.elem_data').not('.skeleton').addClass('skeleton');
 
     if(!refresh){
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
     };
 
     $('.refresh_container').css('opacity', '.3');
@@ -796,18 +441,6 @@ function fetchStyleUpdate(fetching, refresh=false){
 };
 
 function initDOMupdate(connected){
-  if(params['autoRefresh']){
-    $('.autoRefreshing').css({
-      'backgroundColor': 'var(--yellow)',
-      'color': 'black'
-    });
-  }else{
-    $('.autoRefreshing').css({
-      'backgroundColor': 'var(--light-color)',
-      'color': 'white'
-    });
-  };
-
   if(connected){
     $('.elem_data').addClass('skeleton');
     $('.detail_connect').css('display', 'none');
@@ -915,6 +548,8 @@ function NotificationGrantMouseDownHandler(){
 };
 
 function isApop(walletData, oldWalletData){
+  if(!oldWalletData) return;
+
   const currentPNL = parseFloat(walletData.global.pnl);
   const oldPNL = parseFloat(oldWalletData.global.pnl); // Ensure oldPNL is a number
 
@@ -931,9 +566,11 @@ function isApop(walletData, oldWalletData){
 
   if (percentageChange >= 4.5) {
     showNotif({title: "PUMP DETECTED", body: 'ONGOING PNL +'+Math.abs(percentageChange).toFixed(2).toString()+"% | +"+ Math.abs(difference).toFixed(2).toString()+"$"});
+    console.log("PUMP");
   } else if (percentageChange <= -3.5) {
-    if (Math.abs(currentBank - oldBank) < 0.5) return;
+    if (Math.abs(currentBank - oldBank) < 1) return;
     showNotif({title: "CRASH DETECTED", body: 'ONGOING PNL -'+Math.abs(percentageChange).toFixed(2).toString()+"% | -"+ Math.abs(difference).toFixed(2).toString()+"$"});
+    console.log("CRASH");
   };
 
   return;
@@ -1173,12 +810,222 @@ function meanBuyUpdate(price, quantity){
   return fixNumber(meanBuy, 2, {limit: 10, val: 2});
 };
 
-// -------
+// ------------------------------------------------------
+// INIT REAL-TIME + BACKFILL COST BASIS
+// ------------------------------------------------------
+async function initRealTime(apiKey, apiSecret, onPrice) {
+  // 1) snapshot balances
+  const ts = Date.now(),
+        qs0 = `timestamp=${ts}`;
+  const sig    = await signHmacSha256(qs0, apiSecret);
+  const tradesQ = `${qs0}&signature=${sig}`;
+  const snapshot = await proxySigned(apiKey, "/api/v3/account", tradesQ);
 
+  // 2) initialize quantities
+  snapshot.balances.forEach(b => {
+    const qty = parseFloat(b.free)+parseFloat(b.locked);
+    if(qty>0) positions[b.asset] = { qty, cost:0 };
+  });
+
+  // 3) backfill cost basis via myTrades
+  await Promise.all(Object.keys(positions).map(async asset => {
+    if(stableCoins[asset]) return;
+    for(const stable in stableCoins) {
+      const sym = asset + stable;
+      try {
+        // build signed query
+        const ts2 = Date.now();
+        let qs2 = `symbol=${sym}&timestamp=${ts2}`;
+        const sig2 = await signHmacSha256(qs2, apiSecret);
+        qs2 += `&signature=${sig2}`;
+
+        const trades = await proxySigned(apiKey, "/api/v3/myTrades", qs2);
+        const avg = computeAveragePrice(trades);
+        if(avg!==null) positions[asset].cost = avg;
+        break;
+      } catch(_){}
+    }
+  }));
+
+  // 4) initial draw
+  recomputePortfolio();
+
+  // 5) start real-time streams
+  connectPriceWS(Object.keys(positions), onPrice);
+  connectUserWS(apiKey, {
+    onBalances: handleAccountPosition,
+    onOrderUpdate: handleOrderUpdate,
+    onBalanceUpdate: handleBalanceUpdate
+  });
+}
+
+// ------------------------------------------------------
+// WS EVENT HANDLERS & PORTFOLIO RECOMPUTE
+// ------------------------------------------------------
+function handleAccountPosition(balances) {
+  balances.forEach(b => {
+    const asset = b.a || b.asset;
+    const qty = parseFloat(b.f ?? b.free) + parseFloat(b.l ?? b.locked);
+
+    // Exclude stablecoin pairs
+    if (asset.endsWith("USDC")) return;
+
+    if (qty > 0) {
+      positions[asset] = positions[asset] || { qty: 0, cost: 0 };
+      positions[asset].qty = qty;
+    } else {
+      delete positions[asset];
+    }
+  });
+
+  recomputePortfolio();
+}
+
+function handleBalanceUpdate(upd) {
+  const asset = upd.a;
+  const qty   = parseFloat(upd.B);
+  if(qty>0) positions[asset] = positions[asset] || {qty:0,cost:0}, positions[asset].qty = qty;
+  else delete positions[asset];
+
+  recomputePortfolio();
+}
+
+function handleOrderUpdate(r) {
+  const quote = r.s.replace(/[A-Z]+$/, '');
+  const asset = r.s.slice(0, r.s.length - quote.length);
+
+  // Exclude stablecoin pairs
+  if (asset.endsWith("USDC")) return;
+
+  const qty = parseFloat(r.l), price = parseFloat(r.L);
+  const pos = positions[asset] = positions[asset] || { qty: 0, cost: 0 };
+
+  if (r.S === 'BUY') {
+    pos.cost = (pos.cost * pos.qty + price * qty) / (pos.qty + qty);
+    pos.qty += qty;
+  } else {
+    pos.qty = Math.max(0, pos.qty - qty);
+  }
+
+  recomputePortfolio();
+}
+
+function removeDummy(){
+  $('.detail_elem_wrapper').children(".detail_elem")
+  .filter((_, el) => $(el).find(".detail_elem_name").text() == "dummy").remove();
+}
+
+function recomputePortfolio() {
+  let coins = [], bank = 0, pnlSum = 0;
+
+  Object.entries(positions).forEach(([asset, pos]) => {
+
+    if (asset === "USDC") {
+      const conversionRate = stableCoins[asset].conversionRate || 1;
+      const curVal = pos.qty * conversionRate;
+      bank += curVal;
+      return;
+    }
+
+    if (asset.endsWith("USDC")) return;
+
+    if (pos.qty * pos.cost <= 0.5 && !stableCoins.hasOwnProperty(asset)) return;
+
+    if (stableCoins.hasOwnProperty(asset)) {
+      const conversionRate = stableCoins[asset].conversionRate || 1;
+      const curVal = pos.qty * conversionRate;
+
+      coins.push({
+        asset,
+        amount: pos.qty,
+        price: conversionRate,
+        actual_value: curVal,
+        buy_value: curVal,
+        mean_buy: conversionRate,
+        ongoing_pnl: "+0",
+        quoteCurrency: "USDC"
+      });
+
+      bank += curVal;
+    } else {
+      const price = coinPrices[asset + "USDC"] || 0;
+      const buyVal = pos.qty * pos.cost;
+      const curVal = pos.qty * price;
+      const pnl = curVal - buyVal;
+
+      coins.push({
+        asset,
+        amount: pos.qty,
+        price,
+        actual_value: curVal,
+        buy_value: buyVal,
+        mean_buy: pos.cost,
+        ongoing_pnl: pnl >= 0 ? `+${pnl}` : `${pnl}`,
+        quoteCurrency: "USDC"
+      });
+
+      bank += curVal;
+      pnlSum += pnl;
+    }
+  });
+
+  walletData = {
+    coins,
+    global: {
+      bank: fixNumber(bank, 2, { limit: 10, val: 2 }),
+      pnl: pnlSum >= 0 ? `+${fixNumber(pnlSum, 2, { limit: 10, val: 2 })}` : fixNumber(pnlSum, 2, { limit: 10, val: 2 })
+    }
+  };
+
+  displayNewData(walletData);
+
+  let allValid = true;
+  walletData.coins.filter(coin => coin.asset != "USDC").forEach(coin => {
+    if (!(coinPrices.hasOwnProperty(coin.asset + "USDC"))) {
+      allValid = false;
+    }
+  });
+
+  if (allValid && firstLog) {
+    fetchStyleUpdate(false);
+    isApop(walletData, oldWalletData);
+    old_save(walletData);
+
+    removeDummy();
+    $('.detail_elem_wrapper').css('pointer-events', 'all');
+
+    firstLog = false;
+    fullyLoaded = true;
+  }
+}
+
+// ------------------------------------------------------
+// OVERRIDE getDataAndDisplay -> initRealTime
+// ------------------------------------------------------
+async function getDataAndDisplay(refresh=false) {
+  if(!isLogged) return;
+  if(refresh){ displayNewData(walletData); return; }
+  fetchStyleUpdate(true,false);
+  try{
+    await initRealTime(
+      API.API, API.SECRET,
+      (asset, price)=>{
+        coinPrices[asset]=price;
+        recomputePortfolio();
+      }
+    );
+  }catch(e){ 
+    bottomNotification("fetchError"); 
+    clearData(false);
+  }
+}
+
+// ------------------------------------------------------
+// 7) pnl() INIT & EVENT BINDINGS
+// ------------------------------------------------------
 async function pnl(){
 
   // NAVIGATION
-
   $('.blurBG').on('click', function(e){
     if(!$(e.target).is(this)){return}
     closeBlurPage();
@@ -1212,6 +1059,8 @@ async function pnl(){
           isLogged = true;
           api_save(API);
           
+          $('.detail_elem_wrapper').css('pointer-events', 'none');
+
           closeBlurPage();
           getDataAndDisplay();
         }else{
@@ -1228,8 +1077,6 @@ async function pnl(){
       clearData();
       disconnect();
       closeBlurPage();
-      
-      firstLog = true;
     }else{
       bottomNotification('notConnected');
     };
@@ -1241,54 +1088,45 @@ async function pnl(){
     params['filter']['var'] = $("#sortingVar").val();
     params['filter']['way'] = $("#sortingWay").val();
 
+    const mode = params['filter']['var'];
+    const way = params['filter']['way'];
+
+    const sortedCoins = filterWalletData(walletData).coins;
+
+    $('.detail_elem_wrapper').children('.detail_elem').sort((a, b) => {
+      const assetA = $(a).find('.detail_elem_name').text();
+      const assetB = $(b).find('.detail_elem_name').text();
+
+      const coinA = sortedCoins.find(coin => coin.asset === assetA);
+      const coinB = sortedCoins.find(coin => coin.asset === assetB);
+
+      if (!coinA || !coinB) return 0;
+      let comparison = 0;
+
+      switch (mode) {
+        case "NAME":
+          comparison = assetA.localeCompare(assetB);
+          break;
+        case "PNL":
+          comparison = parseFloat(coinA.ongoing_pnl) - parseFloat(coinB.ongoing_pnl);
+          break;
+        case "AMOUNT":
+          comparison = parseFloat(coinA.actual_value) - parseFloat(coinB.actual_value);
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return way === "DESC" ? -comparison : comparison;
+    }).appendTo('.detail_elem_wrapper');
+
     params_save(params);
-    
-    if(!isFetching && isLogged){
-      refreshData(true);
-    }
-  });
-
-  $('.refresh').on('click', function(){
-    if(!isFetching && isLogged){
-      refreshData();
-    };
-  });
-
-  $('.autoRefreshing').on('click', function(){
-    autoRefreshSet(!params['autoRefresh']);
-    params['autoRefresh'] = !params['autoRefresh'];
-    params_save(params);
-  });
-
-  $('.refreshTiming').on('change', function(){
-    if(parseInt($(this).val()) < 60){
-      $(this).val(params['refreshTime']);
-      bottomNotification('tooShort');
-    }else{
-      params['refreshTime'] = parseInt($(this).val());
-      params_save(params);
-  
-      if(params['autoRefresh']){
-        stopTimeout();
-        startTimeout(params['refreshTime']);
-      };
-    };
-  });
-
-  // -----
-
-  document.addEventListener("visibilitychange", async () => {
-    if(document.visibilityState === 'hidden'){
-      if(params['autoRefresh']){stopTimeout()};
-    }else if(document.visibilityState === 'visible'){
-      if(params['autoRefresh']){startTimeout(params['refreshTime'])};
-    };
   });
 
   // SIMULATOR
 
   $('.simulator').on('click', function(){
-    if(!isFetching && isLogged){
+    if(isLogged){
       current_page = "simulator";
       
       $("#coin_selector").children().remove();
@@ -1410,12 +1248,12 @@ async function pnl(){
   $(document).on("keydown", '.strictlyFloatable', function(e) {
     let allowedKeys = [..."0123456789.,", "Backspace", "ArrowLeft", "ArrowRight", "Delete", "Tab"];
 
-	if((e.key === "," || e.key === ".") && !$(this).val().includes(".")){
-		e.preventDefault();
-		$(this).val($(this).val() + ".");
-	}else if((e.key === "," || e.key === ".") && $(this).val().includes(".")){
-		e.preventDefault();
-	};
+    if((e.key === "," || e.key === ".") && !$(this).val().includes(".")){
+      e.preventDefault();
+      $(this).val($(this).val() + ".");
+    }else if((e.key === "," || e.key === ".") && $(this).val().includes(".")){
+      e.preventDefault();
+    };
 
     if (!allowedKeys.includes(e.key)) {
         e.preventDefault();
@@ -1448,23 +1286,18 @@ async function pnl(){
 
   // INIT
 
-  API = api_read();
-  params = params_read();
-  oldWalletData = old_read();
+  API=api_read(); params=params_read(); oldWalletData=old_read();
 
   if(isLogged){
-    $('#api_key-val').val(API['API']);
-    $('#api_secret-val').val(API['SECRET']);
-    
-    autoRefreshSet(params['autoRefresh']);
+    $('#api_key-val').val(API.API);
+    $('#api_secret-val').val(API.SECRET);
+
+    $('.detail_elem_wrapper').css('pointer-events', 'none');
+
     getDataAndDisplay(false);
-
-    // walletData = oldWalletData;
-    // displayNewData(walletData);
-  }else{
+  } else {
     initDOMupdate(false);
-  };
-};
+  }
+}
 
-//RUN 
-$(document).ready(function(){pnl()})
+$(document).ready(pnl);
