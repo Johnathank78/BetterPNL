@@ -382,7 +382,7 @@ body{
     top: 20px;
     left: 20px;
 
-    height: 50px;
+    height: 60px;
 }
 
 .profile_connect{
@@ -652,12 +652,13 @@ body{
     justify-content: center;
 
     height: 100%;
+    width: calc(100% - 20px);
     padding: 0px 10px;
 
     font-size: 16px;
-    color: white;
+    color: black;
 
-    background-color: var(--light-color);
+    background-color: var(--light-yellow);
     border-radius: 8px;
 
     cursor: pointer;
@@ -739,6 +740,11 @@ body{
     border-radius: 6px;
 
     cursor: pointer;
+
+    /* Remove default button styles */
+    border: none;
+    outline: none;
+    appearance: none;
 }
 
 .connect_submit:active{
@@ -795,50 +801,45 @@ body{
     font-size: 18px;
 }
 
-.skeleton {
-    /* We need some fixed dimensions or min-dimensions so the skeleton is visible */
-    min-height: 1em;
-    border-radius: 5px;
-    background: #ccc;      /* base gray background */
-    color: transparent !important;    /* hide the actual text */
-    position: relative;
-    overflow: hidden;      /* so the shimmer doesn't overflow edges */
-    opacity: 0.1;          /* overall opacity for the skeleton block */
-}
-
-.skeleton > *{
+.skeleton > * {
     display: none;
 }
 
-/* The shimmering gradient overlay */
+/* ① Base “block” that will show the shimmer ----------------------------*/
+.skeleton {
+    /* give the block something to measure */
+    min-height: 1em;
+    border-radius: .35rem;
+    background: #ccc;          /* dull gray */
+    color: transparent !important;        /* hide text while loading */
+    position: relative;
+    overflow: hidden;   
+    opacity: .1       /* clip the shimmer at the edges */
+}
+
+/* ② Pseudo-element that carries the moving gradient -------------------*/
 .skeleton::after {
     content: "";
     position: absolute;
-    top: 0;
-    left: -150%;
-    width: 50%;
-    height: 100%;
+    inset: 0;                  /* fill the skeleton */
+    width: 100%;               /* as wide as the parent → percentages are now “parent-wide” */
+    transform: translateX(-100%);   /* start just outside on the left */
 
-    /* A simple left-to-right gradient */
+    /* shiny stripe ↓ */
     background: linear-gradient(
         90deg,
-        transparent 0%,
-        rgba(255,255,255,1) 50%,
-        transparent 100%
+        transparent,
+        rgba(255 255 255 / .8) 50%,
+        transparent
     );
+    background-size: 200% 100%;     /* makes the stripe ~1 parent-width wide */
 
-    /* The animation that slides it */
-    animation: shimmer 1.2s infinite;
+    animation: shimmer 1s linear infinite;
 }
 
-/* Keyframes that move the gradient from left to right */
+/* ③ Move the gradient from -100 % (fully left) to 100 % (fully right) */
 @keyframes shimmer {
-    0% {
-        transform: translateX(0);
-    }
-    100% {
-        transform: translateX(500%);
-    }
+    to { transform: translateX(100%); }
 }
 
 .noselect{
