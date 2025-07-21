@@ -264,7 +264,7 @@ function displayNewData(walletData){
 
   $('.detail_elem_wrapper').find('.detail_elem').filter((_, el) => {
     const assetName = $(el).find(".detail_elem_name").text();
-    return !filteredData.coins.some(coin => coin.asset === assetName);
+    return !filteredData.coins.some(coin => coin.asset === assetName || assetName == "dummy");
   }).remove();
 
   filteredData.coins.forEach(function(coin){
@@ -988,11 +988,12 @@ function recomputePortfolio() {
 
   if (allValid && firstLog) {
     fetchStyleUpdate(false);
+
     isApop(walletData, oldWalletData);
     old_save(walletData);
 
-    removeDummy();
     $('.detail_elem_wrapper').css('pointer-events', 'all');
+    removeDummy();
 
     firstLog = false;
     fullyLoaded = true;
