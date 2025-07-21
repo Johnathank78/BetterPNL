@@ -66,7 +66,7 @@ function bottomNotification(from, target = "", queued=false){
         $(".bottomNotification_Icon").css('scale', "1.1");
 
         if(from == "fetchError"){
-            $(".bottomNotification_msg").text("Error while fetching data : " + target);
+            $(".bottomNotification_msg").text("Cannot reach the proxy");
         }else if(from == "deleteUser"){
             $(".bottomNotification_msg").text("User disconnected");
         }else if(from == "timeout"){
