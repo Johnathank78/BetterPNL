@@ -38,6 +38,7 @@ const stableCoins = {
 // ------------------------------------------------------
 // 1) STORAGE & PARAMS
 // ------------------------------------------------------
+
 function api_read(){
   let d = localStorage.getItem("api");
   if(!d){ isLogged=false; return {"API":"noData","SECRET":"noData"}; }
@@ -70,6 +71,7 @@ function params_save(d){ localStorage.setItem("params",JSON.stringify(d)); }
 // ------------------------------------------------------
 // 2) UTILITIES
 // ------------------------------------------------------
+
 function cloneOBJ(o){ return JSON.parse(JSON.stringify(o)); }
 
 function fixNumber(n, fix, expand){
@@ -120,6 +122,7 @@ function resizeInput(input){
 // ------------------------------------------------------
 // 3) FETCH + HMAC + WORKER PROXY
 // ------------------------------------------------------
+
 async function signHmacSha256(qs, secret){
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw",enc.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
@@ -136,6 +139,7 @@ async function proxySigned(apiKey, endpoint, queryString){
 // ------------------------------------------------------
 // 4) PUBLIC & PRIVATE WEBSOCKETS
 // ------------------------------------------------------
+
 function connectPriceWS(assets, onPrice){
   if(priceWs) priceWs.close(); if(!assets.length) return;
   const streams=assets.map(a=>a.toLowerCase()+"usdc@ticker").join("/");
@@ -148,7 +152,7 @@ async function createListenKey(apiKey){ return fetchJSON(`${WORKER_URL}/listenKe
 
 async function keepAliveKey(apiKey,lk){ return fetchJSON(`${WORKER_URL}/listenKey`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,listenKey:lk})}); }
 
-async function connectUserWS(apiKey,handlers){
+async function connectUserWS(apiKey, handlers){
   if(userWs) userWs.close(); const lk=await createListenKey(apiKey);
   userWs=new WebSocket(`${USER_WS}/${lk}`);
   userWs.onmessage=e=>{ const msg=JSON.parse(e.data); switch(msg.e){ case"outboundAccountPosition":handlers.onBalances(msg.B);break; case"executionReport":handlers.onOrderUpdate(msg);break; case"balanceUpdate":handlers.onBalanceUpdate(msg);break; default:console.debug(msg);} };
@@ -576,7 +580,6 @@ function isApop(walletData, oldWalletData){
   return;
 };
 
-
 // HANDLER FUNCTION 
 
 function backerMousedownHandler(e){
@@ -813,6 +816,7 @@ function meanBuyUpdate(price, quantity){
 // ------------------------------------------------------
 // INIT REAL-TIME + BACKFILL COST BASIS
 // ------------------------------------------------------
+
 async function initRealTime(apiKey, apiSecret, onPrice) {
   // 1) snapshot balances
   const ts = Date.now(),
@@ -862,6 +866,7 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
 // ------------------------------------------------------
 // WS EVENT HANDLERS & PORTFOLIO RECOMPUTE
 // ------------------------------------------------------
+
 function handleAccountPosition(balances) {
   balances.forEach(b => {
     const asset = b.a || b.asset;
@@ -995,10 +1000,12 @@ function recomputePortfolio() {
 // ------------------------------------------------------
 // OVERRIDE getDataAndDisplay -> initRealTime
 // ------------------------------------------------------
+
 async function getDataAndDisplay(refresh=false) {
   if(!isLogged) return;
   if(refresh){ displayNewData(walletData); return; }
   fetchStyleUpdate(true,false);
+
   try{
     await initRealTime(
       API.API, API.SECRET,
@@ -1007,6 +1014,8 @@ async function getDataAndDisplay(refresh=false) {
         recomputePortfolio();
       }
     );
+
+    bottomNotification('connected');
   }catch(e){ 
     bottomNotification("fetchError"); 
     clearData(false);
@@ -1016,7 +1025,9 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 // 7) pnl() INIT & EVENT BINDINGS
 // ------------------------------------------------------
+
 async function pnl(){
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.0</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
@@ -1075,6 +1086,26 @@ async function pnl(){
     };
   });
 
+  document.addEventListener("visibilitychange", async () => {
+    if(document.visibilityState === 'hidden'){
+      if(priceWs) priceWs.close();
+      if(userWs) userWs.close();    
+    }else if(document.visibilityState === 'visible'){
+      try{
+        await initRealTime(
+          API.API, API.SECRET,
+          (asset, price)=>{
+            coinPrices[asset]=price;
+            recomputePortfolio();
+          }
+        );
+      }catch(e){ 
+        bottomNotification("fetchError"); 
+        clearData(false);
+      }
+    };
+  });
+
   // FILTERS & FETCHING
 
   $('.detail_select').on('change', function(){
@@ -1119,7 +1150,7 @@ async function pnl(){
   // SIMULATOR
 
   $('.simulator').on('click', function(){
-    if(isLogged){
+    if(isLogged && fullyLoaded){
       current_page = "simulator";
       
       $("#coin_selector").children().remove();
