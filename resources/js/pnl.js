@@ -1,10 +1,15 @@
 // binance-realtime-full.js
 // Full client-side script: original functions + real-time integration
 
+jQuery.fn.getStyleValue = function(prop){
+    return parseFloat($(this).css(prop).replace('px', ''));
+};
+
 // ------------------------------------------------------
 // CONFIG & GLOBALS
 // ------------------------------------------------------
-const WORKER_URL    = "https://johnathan-denobetterp-43.deno.dev";
+// const WORKER_URL    = "https://johnathan-denobetterp-43.deno.dev";
+const WORKER_URL    = "http://127.0.0.1:8787";
 const PUB_WS        = "wss://stream.binance.com:9443/stream";
 const USER_WS       = "wss://stream.binance.com:9443/ws";
 
@@ -24,8 +29,10 @@ var haveWebNotificationsBeenAccepted = false;
 var focusedCoin = false, coinPrices = false;
 var firstLog = true;
 var fullyLoaded = false;
+var initialDeposit = 0;
 
 var positions = {};
+var availableFunds = 0;
 walletData = { coins: [], global: { bank:0, pnl:0 } };
 coinPrices = coinPrices || {};
 
@@ -160,6 +167,135 @@ async function connectUserWS(apiKey, handlers){
   setInterval(()=>keepAliveKey(apiKey,lk),30*60*1000);
 }
 
+async function getFiatHistoryFirstPage(apiKey, apiSecret, transactionType) {
+  //  ——  earliest possible time (Unix epoch)  ——
+  const beginTime = 0;                 // 1970-01-01T00:00:00Z
+  const endTime   = Date.now();        // “now”
+  const rows      = 500;               // (max)
+
+  // mandatory signed parameters
+  const ts  = Date.now();
+  const qs  =
+    `transactionType=${transactionType}` +
+    `&beginTime=${beginTime}` +
+    `&endTime=${endTime}` +
+    `&rows=${rows}` +
+    `&timestamp=${ts}`;
+  const sig = await signHmacSha256(qs, apiSecret);
+  const fullQuery = `${qs}&signature=${sig}`;
+
+  // send through the worker’s /proxyFiatOrders endpoint
+  return fetchJSON(
+    `${WORKER_URL}/proxyFiatOrders`,
+    {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({ apiKey, queryString: fullQuery })
+    }
+  );
+}
+
+async function getFiatPaymentsFirstPage(apiKey, apiSecret, type) {
+  const rows = 500;
+  const now  = Date.now();                     // also used as timestamp
+  const qs   =
+    `transactionType=${type}` +
+    `&beginTime=0` +                           // start of history
+    `&endTime=${now}` +
+    `&rows=${rows}` +
+    `&timestamp=${now}`;
+
+  const sig  = await signHmacSha256(qs, apiSecret);
+  const full = `${qs}&signature=${sig}`;
+
+  // requires the /proxyFiatPayments route already added in the worker
+  return fetchJSON(
+    `${WORKER_URL}/proxyFiatPayments`,
+    {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({ apiKey, queryString: full })
+    }
+  );
+}
+
+async function getFiatDeposit(apiKey, apiSecret) {
+  let deposit = await getFiatHistoryFirstPage(apiKey, apiSecret, 0);
+  let deposit2 = await getFiatPaymentsFirstPage(apiKey, apiSecret, 0);
+  let withdraw  = await getFiatHistoryFirstPage(apiKey, apiSecret, 1);
+
+  let sum_deposit = deposit.data.reduce(
+    (sum, r) =>
+      r.status === "Successful"
+        ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
+        : sum,
+    0
+  );
+
+  let sum_withdraw = withdraw.data.reduce(
+    (sum, r) =>
+      r.status === "Successful"
+        ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
+        : sum,
+    0
+  );
+
+  let sum_deposit2 = deposit2.data.reduce(
+    (sum, r) =>
+      r.status === "Completed"
+        ? sum + Math.abs(parseFloat(r.sourceAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
+        : sum,
+    0
+  );
+
+  return sum_deposit + sum_deposit2 - sum_withdraw;
+}
+
+async function getReservedFundsUSDC(apiKey, apiSecret) {
+  /* 1 – build & sign the query string */
+  const ts   = Date.now();
+  let   qs   = `timestamp=${ts}`;                       // no symbol ⇒ all symbols
+  const sig  = await signHmacSha256(qs, apiSecret);
+  qs += `&signature=${sig}`;
+
+  /* 2 – request open orders through the worker */
+  const orders = await fetchJSON(
+    `${WORKER_URL}/proxyOpenOrders`,
+    {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({ apiKey, queryString: qs })
+    }
+  );
+
+  if (!Array.isArray(orders) || !orders.length) return 0;
+
+  /* 3 – sum reserved quote value, converting each leg to USDC */
+  return orders.reduce((sum, o) => {
+    if (o.side !== "BUY" || !["NEW", "PARTIALLY_FILLED"].includes(o.status)) return sum;
+
+    // remaining quantity still waiting to fill
+    const remainingQty = parseFloat(o.origQty) - parseFloat(o.executedQty || 0);
+
+    // unit price (Binance returns it as string); some market orders have price "0"
+    const price = parseFloat(o.price || o.cummulativeQuoteQty / o.origQty);
+
+    if (!remainingQty || !price) return sum;
+
+    // detect the quote currency by checking against known stable-coins
+    let quote = null;
+    for (const sc in stableCoins) {
+      if (o.symbol.endsWith(sc)) { quote = sc; break; }
+    }
+    if (!quote) return sum;                                // skip exotic pairs
+
+    const quoteToUSDC = coinPrices[quote + "USDC"] ?? 1;   // usually 1 for USDC itself
+    const reservedUSDC = remainingQty * price * quoteToUSDC;
+
+    return sum + reservedUSDC;
+  }, 0);
+}
+
 // ------------------------------------------------------
 // 5) ORIGINAL DATA-PROCESSING & DISPLAY
 // ------------------------------------------------------
@@ -262,7 +398,7 @@ function filterHoldings(walletData, coinPrices, balances){
 function displayNewData(walletData){
   if(API['API'] == "noData" || walletData == false){return};
 
-  updateGlobalElements(walletData.global.bank, walletData.global.pnl);
+  updateGlobalElements(walletData.global.bank, walletData.global.pnl, initialDeposit, availableFunds);
 
   let filteredData = filterWalletData(walletData);
 
@@ -278,12 +414,20 @@ function displayNewData(walletData){
   });
 };
 
-function updateGlobalElements(bank, pnl){
-  const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
-  $('.global_elem.bank .elem_data').html(bank + ' <span class="currency">$</span>');
-  $('.global_elem.pnl .elem_data').html(pnl + ' <span class="currency">$</span>');
+function updateGlobalElements(bank, pnl, initialDeposit, availableBank){
+  const allTimePnl = fixNumber(bank - initialDeposit, 2);
 
-  $('.pnl_data').css('color', pnlColor)
+  const allTimePnlColor = allTimePnl > 0 ? 'var(--green)' : allTimePnl < 0 ? 'var(--red)' : 'var(--gray)';
+  const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
+
+  $('.bank_data').html(bank + ' <span class="currency">$</span>');
+  $('.available_data').html(fixNumber(availableBank, 2) + ' <span class="currency">$</span>');
+
+  $('.pnl_data').html(pnl + ' <span class="currency">$</span>');
+  $('.pnl_data').css('color', pnlColor);
+
+  $('.all_pnl_data').html(allTimePnl + ' <span class="currency">$</span>');
+  $('.all_pnl_data').css('color', allTimePnlColor);
 };
 
 function getCoinProportion(coin){
@@ -406,6 +550,7 @@ function clearData(disconnect){
     walletData = cloneOBJ(oldWalletData);
     displayNewData(walletData);
     fetchStyleUpdate(false);
+    removeDummy();
   }else{
     $('.detail_elem_wrapper').children().not('.detail_connect').remove();
     $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
@@ -969,8 +1114,8 @@ function recomputePortfolio() {
   walletData = {
     coins,
     global: {
-      bank: fixNumber(bank, 2, { limit: 10, val: 2 }),
-      pnl: pnlSum >= 0 ? `+${fixNumber(pnlSum, 2, { limit: 10, val: 2 })}` : fixNumber(pnlSum, 2, { limit: 10, val: 2 })
+      bank: fixNumber(bank, 2),
+      pnl: pnlSum >= 0 ? `+${fixNumber(pnlSum, 2)}` : fixNumber(pnlSum, 2)
     }
   };
 
@@ -984,13 +1129,21 @@ function recomputePortfolio() {
   });
 
   if (allValid && firstLog) {
-    fetchStyleUpdate(false);
+    getFiatDeposit(API.API, API.SECRET).then(fiatDeposit => {
+      initialDeposit = fiatDeposit;
 
+      getReservedFundsUSDC(API.API, API.SECRET).then(reservedFunds => {
+        availableFunds = positions["USDC"].qty - reservedFunds;
+        updateGlobalElements(walletData.global.bank, walletData.global.pnl, initialDeposit, availableFunds);
+
+        $('.detail_elem_wrapper').css('pointer-events', 'all');
+        fetchStyleUpdate(false);
+        removeDummy();
+      });
+    });
+  
     isApop(walletData, oldWalletData);
     old_save(walletData);
-
-    $('.detail_elem_wrapper').css('pointer-events', 'all');
-    removeDummy();
 
     firstLog = false;
     fullyLoaded = true;
@@ -1223,7 +1376,8 @@ async function pnl(){
 
   $('#putMaxInvest').on('click', function(){
     let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-    let funds = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {limit: 10, val: 2});
+    let funds = fixNumber(availableFunds, 2, {limit: 10, val: 2});
+    // let funds = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {limit: 10, val: 2});
 
     $('#buyQuantity').val(funds);
     $('#buyQuantity').change();
@@ -1306,6 +1460,17 @@ async function pnl(){
 
   $(document).on('input', ".resizingInp", function(){
     resizeInput(this);
+  });
+
+  $('.global_elem_scrollable').on('scroll', function(e){
+    let maxScroll = $(this).getStyleValue('width') + $(this).getStyleValue('gap');
+    if($(this).scrollLeft() == 0){
+      $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'white');
+      $(this).parent().find(".global_elem_indicator_bar").eq(1).css('backgroundColor', 'black');
+    }else if($(this).scrollLeft() == maxScroll){
+      $(this).parent().find(".global_elem_indicator_bar").eq(1).css('backgroundColor', 'white');
+      $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'black');
+    };
   });
 
   // INIT
