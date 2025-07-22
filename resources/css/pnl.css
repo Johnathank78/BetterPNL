@@ -225,7 +225,7 @@ body{
     cursor: pointer;
 }
 
-.pnl_data{
+.pnl_data, .all_pnl_data{
     color: var(--gray);
 }
 
@@ -457,18 +457,72 @@ body{
 }
 
 .global_elem{
+    position: relative;
+    display: grid;
+
+    padding: 12px 15px;
+    height: 69px;
+    
+    background-color: var(--medium-color);
+    border-radius: 8px;
+}
+
+.global_elem_scrollable{
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+
+    width: 100%;
+    height: 100%;
+    
+    overflow-x: scroll;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory !important;
+
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+.global_elem_scrollable::-webkit-scrollbar{
+    display: none;
+}
+
+.global_elem_wrapper{
     display: flex;
     flex-direction: column;
 
     align-items: flex-start;
     justify-content: space-between;
 
-    padding: 12px 15px;
-    height: 66px;
-    
+    width: 100%;
+    height: 92%;
+
     color: white;
-    background-color: var(--medium-color);
-    border-radius: 8px;
+}
+
+.global_elem_indicator{
+    position: absolute;
+    
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 5px;
+    display: flex;
+    flex-direction: row;
+
+    gap: 5px;
+
+    width: 45%;
+    height: 5px;
+}
+
+.global_elem_indicator_bar{
+    width: 50%;
+    height: 100%;
+
+    background-color: black;
+    border-radius: 4px;
+
+    opacity: .2;
 }
 
 .elem_title{
