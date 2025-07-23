@@ -446,6 +446,24 @@ body{
     display: none;
 }
 
+.parameter_percentage{
+    position: absolute;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    top: 10px;
+    right: 10px;
+
+    font-size: 12px;
+    background-color: var(--light-color);
+
+    padding: 8px 10px;
+
+    border-radius: 8px;
+}
+
 .global_wrapper{
     display: grid;
     grid-template-columns: repeat(2, 1fr); /* 2 colonnes de largeur égale */
@@ -498,6 +516,7 @@ body{
     height: 92%;
 
     color: white;
+    scroll-snap-align: start;
 }
 
 .global_elem_indicator{
