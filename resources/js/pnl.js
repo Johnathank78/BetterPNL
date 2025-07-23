@@ -16,7 +16,7 @@ const USER_WS       = "wss://stream.binance.com:9443/ws";
 let priceWs = null, userWs = null;
 
 // FEEs, UI flags, timeouts, data holders
-const takerFEE = 0.001, makerFEE = 0.001;
+const takerFEE = 0.0001, makerFEE = 0.0001;
 const isMobile = /Mobi/.test(navigator.userAgent);
 const DRAG_THRESHOLD = 15, MAX_PULL = 30;
 
@@ -342,8 +342,8 @@ function computeAveragePrice(trades){
   // Sort by time ascending
   trades.sort((a, b) => a.time - b.time);
 
-  let positionQty = 0.0;
-  let positionCost = 0.0;
+  let positionQty = 0.00;
+  let positionCost = 0.00;
 
   for (const t of trades) {
     const qty = parseFloat(t.qty);
@@ -466,8 +466,8 @@ function updateGlobalElements(walletData, initialDeposit, availableBank){
   $('.bank_data').html(bankHTML);
   $('.available_data').html(availableBankHTML);
 
-  $('.pnl_data').html(pnlHTML);
-  $('.pnl_data').css('color', pnlColor);
+  $('.ongoingPnl_data').html(pnlHTML);
+  $('.ongoingPnl_data').css('color', pnlColor);
 
   $('.all_pnl_data').html(allTimePnlHTML);
   $('.all_pnl_data').css('color', allTimePnlColor);
@@ -597,8 +597,8 @@ function clearData(disconnect){
     removeDummy();
   }else{
     $('.detail_elem_wrapper').children().not('.detail_connect').remove();
-    $('.global_elem.bank .elem_data').html('0.0' + ' <span class="currency">$</span>');
-    $('.global_elem.pnl .elem_data').html('0.0' + ' <span class="currency">$</span>');
+    $('.global_elem.bank .elem_data').html('0.00' + ' <span class="currency">$</span>');
+    $('.global_elem.pnl .elem_data').html('0.00' + ' <span class="currency">$</span>');
     $('.pnl_data').css('color', 'var(--gray)');
     
     if(disconnect){
@@ -1239,7 +1239,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.6</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.7</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
