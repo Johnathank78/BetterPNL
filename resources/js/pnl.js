@@ -225,30 +225,30 @@ async function getFiatDeposit(apiKey, apiSecret) {
   let deposit = await getFiatHistoryFirstPage(apiKey, apiSecret, 0);
   let deposit2 = await getFiatPaymentsFirstPage(apiKey, apiSecret, 0);
   let withdraw  = await getFiatHistoryFirstPage(apiKey, apiSecret, 1);
-
-  let sum_deposit = deposit.data.reduce(
+  
+  let sum_deposit = (!Array.isArray(deposit.data)) ? 0 : deposit.data.reduce(
     (sum, r) =>
       r.status === "Successful"
         ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
         : sum,
     0
-  ) ?? 0;
+  );
 
-  let sum_withdraw = withdraw.data.reduce(
-    (sum, r) =>
-      r.status === "Successful"
-        ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
-        : sum,
-    0
-  ) ?? 0;
-
-  let sum_deposit2 = deposit2.data.reduce(
+  let sum_deposit2 = (!Array.isArray(deposit2.data)) ? 0 : deposit2.data.reduce(
     (sum, r) =>
       r.status === "Completed"
         ? sum + Math.abs(parseFloat(r.sourceAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
         : sum,
     0
-  ) ?? 0;
+  );
+
+  let sum_withdraw = (!Array.isArray(withdraw.data)) ? 0 : withdraw.data.reduce(
+    (sum, r) =>
+      r.status === "Successful"
+        ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
+        : sum,
+    0
+  );
 
   return sum_deposit + sum_deposit2 - sum_withdraw;
 }
@@ -1239,7 +1239,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.5</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.6</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
