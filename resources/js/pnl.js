@@ -63,7 +63,7 @@ function old_save(d){ localStorage.setItem("oldWallet",JSON.stringify(d)); }
 function params_read(){
   let d = localStorage.getItem("params");
   if(!d){
-    params = { filter:{var:"NAME",way:"ASC"}, isPercentage: false};
+    params = { filter:{var:"NAME",way:"ASC"}, isPercentage: false, onLoadPnlType: "ongoing"};
     $("#sortingVar").val("NAME"); $("#sortingWay").val("ASC");
     return params;
   }
@@ -71,6 +71,12 @@ function params_read(){
   params = JSON.parse(d);
   $("#sortingVar").val(params.filter.var);
   $("#sortingWay").val(params.filter.way);
+
+  $('.pnl').find('.global_elem_scrollable').scrollLeft(params.onLoadPnlType == "allTime"
+    ? $('.pnl').find('.global_elem_scrollable')[0].scrollWidth
+    : 0
+  );
+
   $(".parameter_percentage").css('backgroundColor', params.isPercentage ? 'var(--yellow)' : 'var(--light-color)');
 
   return params;
@@ -187,14 +193,18 @@ async function getFiatHistoryFirstPage(apiKey, apiSecret, transactionType) {
   const fullQuery = `${qs}&signature=${sig}`;
 
   // send through the worker’s /proxyFiatOrders endpoint
-  return fetchJSON(
-    `${WORKER_URL}/proxyFiatOrders`,
-    {
-      method : "POST",
-      headers: { "Content-Type": "application/json" },
-      body   : JSON.stringify({ apiKey, queryString: fullQuery })
-    }
-  );
+  try {
+    return fetchJSON(
+      `${WORKER_URL}/proxyFiatOrders`,
+      {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify({ apiKey, queryString: fullQuery })
+      }
+    );
+  } catch (error) {
+    throw error
+  }
 }
 
 async function getFiatPaymentsFirstPage(apiKey, apiSecret, type) {
@@ -211,21 +221,30 @@ async function getFiatPaymentsFirstPage(apiKey, apiSecret, type) {
   const full = `${qs}&signature=${sig}`;
 
   // requires the /proxyFiatPayments route already added in the worker
-  return fetchJSON(
-    `${WORKER_URL}/proxyFiatPayments`,
-    {
-      method : "POST",
-      headers: { "Content-Type": "application/json" },
-      body   : JSON.stringify({ apiKey, queryString: full })
-    }
-  );
+  try {
+    return fetchJSON(
+      `${WORKER_URL}/proxyFiatPayments`,
+      {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify({ apiKey, queryString: full })
+      }
+    );
+  } catch (error) {
+    throw error
+  }
 }
 
 async function getFiatDeposit(apiKey, apiSecret) {
-  let deposit = await getFiatHistoryFirstPage(apiKey, apiSecret, 0);
-  let deposit2 = await getFiatPaymentsFirstPage(apiKey, apiSecret, 0);
-  let withdraw  = await getFiatHistoryFirstPage(apiKey, apiSecret, 1);
-  
+  let deposit, deposit2, withdraw;
+
+  try {
+    deposit   = await getFiatHistoryFirstPage(apiKey, apiSecret, 0);
+    deposit2  = await getFiatPaymentsFirstPage(apiKey, apiSecret, 0);
+    withdraw  = await getFiatHistoryFirstPage(apiKey, apiSecret, 1); 
+  } catch (error) {
+    throw error
+  }
   let sum_deposit = (!Array.isArray(deposit.data)) ? 0 : deposit.data.reduce(
     (sum, r) =>
       r.status === "Successful"
@@ -261,14 +280,20 @@ async function getReservedFundsUSDC(apiKey, apiSecret) {
   qs += `&signature=${sig}`;
 
   /* 2 – request open orders through the worker */
-  const orders = await fetchJSON(
-    `${WORKER_URL}/proxyOpenOrders`,
-    {
-      method : "POST",
-      headers: { "Content-Type": "application/json" },
-      body   : JSON.stringify({ apiKey, queryString: qs })
-    }
-  );
+  let orders;
+
+  try {
+    orders = await fetchJSON(
+      `${WORKER_URL}/proxyOpenOrders`,
+      {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify({ apiKey, queryString: qs })
+      }
+    );
+  } catch (error) {
+    throw error
+  }
 
   if (!Array.isArray(orders) || !orders.length) return 0;
 
@@ -414,64 +439,64 @@ function displayNewData(walletData){
       generateAndPushTile(coin);
     };
   });
+
+  if(fullyLoaded) orderTiles(params['filter']['var'], params['filter']['way']);
 };
 
-function updateGlobalElements(walletData, initialDeposit, availableBank){
-  // if(!fullyLoaded) return;
+function updateGlobalElements(walletData, initialDeposit, availableBank) {
+  /* ────────── helpers ────────── */
+  const fmt = (n, sym = '$') =>
+    `${fixNumber(n, 2, { limit: 2, val: 2 })} <span class="currency">${sym}</span>`;
 
-  var computedAllTimePnl = "ERROR";
-  var allTimePnlHTML = "ERROR";
-  var allTimePnlColor = "var(--gray)";
+  const fmtSigned = (n, sym) =>
+    `${n >= 0 ? '+' : '-'}${fmt(Math.abs(n), sym)}`;
 
-  var availableBankHTML = "ERROR";
-  const symbol = params.isPercentage ? '%' : '$';
-  var sign = false;
+  const colorFor = n =>
+    n > 0 ? 'var(--green)' : n < 0 ? 'var(--red)' : 'var(--gray)';
 
-  if(initialDeposit != "ERROR"){
-    computedAllTimePnl = params.isPercentage ? fixNumber(((walletData.global.bank - initialDeposit) / initialDeposit) * 100, 2) : fixNumber(walletData.global.bank - initialDeposit, 2);
-    sign = computedAllTimePnl >= 0 ? '+' : '-'
+  const ERR = { html: 'ERROR', color: 'var(--red)' };
 
-    if(isNaN(computedAllTimePnl)){
-      allTimePnlHTML  = "ERROR";
-      allTimePnlColor = 'var(--red)';
-    }else{
-      allTimePnlHTML = sign + fixNumber(Math.abs(computedAllTimePnl), 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
-      allTimePnlColor = computedAllTimePnl > 0 ? 'var(--green)' : computedAllTimePnl < 0 ? 'var(--red)' : 'var(--gray)';
-    }
-  };
+  /* ────────── 1) BANK (total USDC value) ────────── */
+  const bankHTML = fmt(walletData.global.bank);
 
-  if(availableBank != "ERROR"){
-    availableBankHTML = fixNumber(availableBank, 2, {limit: 2, val: 2}) + ' <span class="currency">$</span>'
-  }
+  /* ────────── 2) AVAILABLE USDC ────────── */
+  const avail = availableBank === 'ERROR' ? ERR : { html: fmt(availableBank), color: null };
 
-  var bankHTML = fixNumber(walletData.global.bank, 2, {limit: 2, val: 2}) + ' <span class="currency">$</span>';
-  var holdings = Object.entries(positions)
-    .filter(([key]) => key !== 'USDC') // Exclude USDC
-    .reduce((sum, [_, { qty, cost }]) => sum + qty * cost, 0)
+  /* ────────── 3) ALL-TIME P&L vs initial deposit ────────── */
+  const allPnl =
+    initialDeposit === 'ERROR'
+      ? ERR
+      : (() => {
+          const delta = params.isPercentage
+            ? ((walletData.global.bank - initialDeposit) / initialDeposit) * 100
+            : walletData.global.bank - initialDeposit;
+          if (isNaN(delta)) return ERR;
+          return { html: fmtSigned(delta, params.isPercentage ? '%' : '$'), color: colorFor(delta) };
+        })();
 
-  var computedPnl = params.isPercentage ? fixNumber((walletData.global.pnl / holdings) * 100, 2) : walletData.global.pnl;
-  sign = computedPnl >= 0 ? '+' : '-';
+  /* ────────── 4) ONGOING P&L vs holdings cost ────────── */
+  const holdingsCost = Object.entries(positions)
+    .filter(([k]) => k !== 'USDC')
+    .reduce((sum, [_, { qty, cost }]) => sum + qty * cost, 0);
 
-  var pnlHTML  = false;
-  var pnlColor = false;
+  const ongoingVal =
+    (() => {
+      const raw = params.isPercentage
+        ? (walletData.global.pnl / holdingsCost) * 100
+        : walletData.global.pnl;
+      if (isNaN(raw)) return ERR;
+      return { html: fmtSigned(raw, params.isPercentage ? '%' : '$'), color: colorFor(raw) };
+    })();
 
-  if(isNaN(computedPnl)){
-    pnlHTML  = "ERROR";
-    pnlColor = 'var(--red)';
-  }else{
-    pnlHTML  = sign + fixNumber(Math.abs(computedPnl), 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
-    pnlColor = computedPnl > 0 ? 'var(--green)' : computedPnl < 0 ? 'var(--red)' : 'var(--gray)';
-  }
-
+  /* ────────── 5) inject into DOM ────────── */
   $('.bank_data').html(bankHTML);
-  $('.available_data').html(availableBankHTML);
 
-  $('.ongoingPnl_data').html(pnlHTML);
-  $('.ongoingPnl_data').css('color', pnlColor);
+  $('.available_data').html(avail.html);
 
-  $('.all_pnl_data').html(allTimePnlHTML);
-  $('.all_pnl_data').css('color', allTimePnlColor);
-};
+  $('.all_pnl_data').html(allPnl.html).css('color', allPnl.color);
+
+  $('.ongoingPnl_data').html(ongoingVal.html).css('color', ongoingVal.color);
+}
 
 function getCoinProportion(coin){
   let total_value = 0;
@@ -643,6 +668,37 @@ function initDOMupdate(connected){
     $('.detail_connect').css('display', 'flex');
     $('.refresh_container').css('opacity', '.3');
   };
+};
+
+function orderTiles(mode, way){
+  const sortedCoins = filterWalletData(walletData).coins;
+
+  $('.detail_elem_wrapper').children('.detail_elem').sort((a, b) => {
+    const assetA = $(a).find('.detail_elem_name').text();
+    const assetB = $(b).find('.detail_elem_name').text();
+
+    const coinA = sortedCoins.find(coin => coin.asset === assetA);
+    const coinB = sortedCoins.find(coin => coin.asset === assetB);
+
+    if (!coinA || !coinB) return 0;
+    let comparison = 0;
+
+    switch (mode) {
+      case "NAME":
+        comparison = assetA.localeCompare(assetB);
+        break;
+      case "PNL":
+        comparison = parseFloat(coinA.ongoing_pnl) - parseFloat(coinB.ongoing_pnl);
+        break;
+      case "AMOUNT":
+        comparison = parseFloat(coinA.buy_value) - parseFloat(coinB.buy_value);
+        break;
+      default:
+        comparison = 0;
+    }
+
+    return way === "DESC" ? -comparison : comparison;
+  }).appendTo('.detail_elem_wrapper');
 };
 
 // NAVIGATION
@@ -1158,8 +1214,8 @@ function recomputePortfolio() {
   walletData = {
     coins,
     global: {
-      bank: fixNumber(bank, 2),
-      pnl: pnlSum >= 0 ? `+${fixNumber(pnlSum, 2)}` : fixNumber(pnlSum, 2)
+      bank: bank,
+      pnl: pnlSum
     }
   };
 
@@ -1172,41 +1228,39 @@ function recomputePortfolio() {
     }
   });
 
-  if (allValid && firstLog) {
-    try {
-      getFiatDeposit(API.API, API.SECRET).then(fiatDeposit => {
-        initialDeposit = fiatDeposit;
-  
-        getReservedFundsUSDC(API.API, API.SECRET).then(reservedFunds => {
-          availableFunds = positions["USDC"].qty - reservedFunds;
-
-          fullyLoaded = true;
-          updateGlobalElements(walletData, initialDeposit, availableFunds);
-  
-          isApop(walletData, oldWalletData);
-          $('.detail_elem_wrapper').css('pointer-events', 'all');
-          fetchStyleUpdate(false);
-          removeDummy();
-        });
-      });
-    } catch (error) {
-      initialDeposit = "ERROR";
-      availableFunds = "ERROR";
-
-      fullyLoaded = true;
-      updateGlobalElements(walletData, initialDeposit, availableFunds);
-  
-      isApop(walletData, oldWalletData);
-      $('.detail_elem_wrapper').css('pointer-events', 'all');
-      fetchStyleUpdate(false);
-      removeDummy();
-    };
-    
+  if(allValid){
     old_save(walletData);
 
-    firstLog = false;
-    fullyLoaded = true;
-  }
+    if (firstLog) {
+      firstLog = false;
+
+      (async () => {
+        try {
+          const [fiatDeposit, reservedFunds] = await Promise.all([
+            getFiatDeposit(API.API, API.SECRET),
+            getReservedFundsUSDC(API.API, API.SECRET)
+          ]);
+
+          initialDeposit  = fiatDeposit;
+          availableFunds  = (positions["USDC"]?.qty ?? 0) - reservedFunds;
+        } catch (err) {
+          console.error("Initial funding check failed:", err);
+          initialDeposit  = "ERROR";
+          availableFunds  = "ERROR";
+        } finally {
+          updateGlobalElements(walletData, initialDeposit, availableFunds);
+          
+          isApop(walletData, oldWalletData);
+          $(".detail_elem_wrapper").css("pointer-events", "all");
+          
+          fetchStyleUpdate(false);
+          removeDummy();
+
+          fullyLoaded = true;
+        }
+      })();   // immediately-invoked async function
+    }
+  };
 }
 
 // ------------------------------------------------------
@@ -1324,38 +1378,7 @@ async function pnl(){
     params['filter']['var'] = $("#sortingVar").val();
     params['filter']['way'] = $("#sortingWay").val();
 
-    const mode = params['filter']['var'];
-    const way = params['filter']['way'];
-
-    const sortedCoins = filterWalletData(walletData).coins;
-
-    $('.detail_elem_wrapper').children('.detail_elem').sort((a, b) => {
-      const assetA = $(a).find('.detail_elem_name').text();
-      const assetB = $(b).find('.detail_elem_name').text();
-
-      const coinA = sortedCoins.find(coin => coin.asset === assetA);
-      const coinB = sortedCoins.find(coin => coin.asset === assetB);
-
-      if (!coinA || !coinB) return 0;
-      let comparison = 0;
-
-      switch (mode) {
-        case "NAME":
-          comparison = assetA.localeCompare(assetB);
-          break;
-        case "PNL":
-          comparison = parseFloat(coinA.ongoing_pnl) - parseFloat(coinB.ongoing_pnl);
-          break;
-        case "AMOUNT":
-          comparison = parseFloat(coinA.buy_value) - parseFloat(coinB.buy_value);
-          break;
-        default:
-          comparison = 0;
-      }
-
-      return way === "DESC" ? -comparison : comparison;
-    }).appendTo('.detail_elem_wrapper');
-
+    orderTiles(params['filter']['var'], params['filter']['way']);
     params_save(params);
   });
 
@@ -1545,6 +1568,11 @@ async function pnl(){
     }else if(scroll >= maxScroll){
       $(this).parent().find(".global_elem_indicator_bar").eq(1).css('backgroundColor', 'white');
       $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'black');
+    };
+
+    if($(this).parent().is('.pnl') && (scroll == 0 || scroll == maxScroll)){
+      params.onLoadPnlType = scroll == 0 ? "ongoing" : "allTime";
+      params_save(params); 
     };
   });
 
