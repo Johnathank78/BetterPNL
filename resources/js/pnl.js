@@ -444,25 +444,28 @@ function displayNewData(walletData){
 };
 
 function updateGlobalElements(walletData, initialDeposit, availableBank) {
-  /* ────────── helpers ────────── */
-  const fmt = (n, sym = '$') =>
-    `${fixNumber(n, 2, { limit: 2, val: 2 })} <span class="currency">${sym}</span>`;
+  /* ── tiny helpers ────────────────────────────────────────── */
+  const fmt = (n, symbol = '$') =>
+    `${fixNumber(n, 2, { limit: 2, val: 2 })} <span class="currency">${symbol}</span>`;
 
-  const fmtSigned = (n, sym) =>
-    `${n >= 0 ? '+' : '-'}${fmt(Math.abs(n), sym)}`;
+  const fmtSigned = (n, symbol) =>
+    `${n >= 0 ? '+' : '-'}${fmt(Math.abs(n), symbol)}`;
 
   const colorFor = n =>
     n > 0 ? 'var(--green)' : n < 0 ? 'var(--red)' : 'var(--gray)';
 
   const ERR = { html: 'ERROR', color: 'var(--red)' };
 
-  /* ────────── 1) BANK (total USDC value) ────────── */
+  /* ── 1) Total portfolio value (USDC) ─────────────────────── */
   const bankHTML = fmt(walletData.global.bank);
 
-  /* ────────── 2) AVAILABLE USDC ────────── */
-  const avail = availableBank === 'ERROR' ? ERR : { html: fmt(availableBank), color: null };
+  /* ── 2) Available USDC (wallet - reserved) ──────────────── */
+  const avail =
+    availableBank === 'ERROR'
+      ? ERR
+      : { html: fmt(availableBank), color: 'white' };
 
-  /* ────────── 3) ALL-TIME P&L vs initial deposit ────────── */
+  /* ── 3) All-time PnL vs initial deposit ─────────────────── */
   const allPnl =
     initialDeposit === 'ERROR'
       ? ERR
@@ -470,32 +473,46 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
           const delta = params.isPercentage
             ? ((walletData.global.bank - initialDeposit) / initialDeposit) * 100
             : walletData.global.bank - initialDeposit;
+
           if (isNaN(delta)) return ERR;
-          return { html: fmtSigned(delta, params.isPercentage ? '%' : '$'), color: colorFor(delta) };
+          return {
+            html : fmtSigned(delta, params.isPercentage ? '%' : '$'),
+            color: colorFor(delta)
+          };
         })();
 
-  /* ────────── 4) ONGOING P&L vs holdings cost ────────── */
+  /* ── 4) Ongoing PnL vs cost basis of non-USDC holdings ──── */
   const holdingsCost = Object.entries(positions)
     .filter(([k]) => k !== 'USDC')
     .reduce((sum, [_, { qty, cost }]) => sum + qty * cost, 0);
 
-  const ongoingVal =
+  const ongoing =
     (() => {
       const raw = params.isPercentage
         ? (walletData.global.pnl / holdingsCost) * 100
         : walletData.global.pnl;
+
       if (isNaN(raw)) return ERR;
-      return { html: fmtSigned(raw, params.isPercentage ? '%' : '$'), color: colorFor(raw) };
+      return {
+        html : fmtSigned(raw, params.isPercentage ? '%' : '$'),
+        color: colorFor(raw)
+      };
     })();
 
-  /* ────────── 5) inject into DOM ────────── */
+  /* ── 5) Inject values & colours into the DOM ─────────────── */
   $('.bank_data').html(bankHTML);
 
-  $('.available_data').html(avail.html);
+  $('.available_data')
+    .html(avail.html)
+    .css('color', avail.color);              // ← colour now applied
 
-  $('.all_pnl_data').html(allPnl.html).css('color', allPnl.color);
+  $('.all_pnl_data')
+    .html(allPnl.html)
+    .css('color', allPnl.color);
 
-  $('.ongoingPnl_data').html(ongoingVal.html).css('color', ongoingVal.color);
+  $('.ongoingPnl_data')
+    .html(ongoing.html)
+    .css('color', ongoing.color);
 }
 
 function getCoinProportion(coin){
@@ -1293,7 +1310,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.7</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.8</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
@@ -1358,6 +1375,11 @@ async function pnl(){
       if(userWs) userWs.close();    
     }else if(document.visibilityState === 'visible'){
       try{
+        if(initialDeposit == "ERROR" || availableFunds == "ERROR"){
+          $('.all_pnl_data, .available_data').addClass('skeleton');
+          firstLog = true;
+        }
+
         await initRealTime(
           API.API, API.SECRET,
           (asset, price)=>{
