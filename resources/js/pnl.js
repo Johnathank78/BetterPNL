@@ -424,8 +424,8 @@ function updateGlobalElements(walletData, initialDeposit, availableBank){
   var allTimePnlColor = "var(--gray)";
 
   var availableBankHTML = "ERROR";
-  var symbol = params.isPercentage ? '%' : '$';
-  var sign = "+";
+  const symbol = params.isPercentage ? '%' : '$';
+  var sign = false;
 
   if(initialDeposit != "ERROR"){
     computedAllTimePnl = params.isPercentage ? fixNumber(((walletData.global.bank - initialDeposit) / initialDeposit) * 100, 2) : fixNumber(walletData.global.bank - initialDeposit, 2);
@@ -435,7 +435,7 @@ function updateGlobalElements(walletData, initialDeposit, availableBank){
       allTimePnlHTML  = "ERROR";
       allTimePnlColor = 'var(--red)';
     }else{
-      allTimePnlHTML = sign + fixNumber(computedAllTimePnl, 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
+      allTimePnlHTML = sign + fixNumber(Math.abs(computedAllTimePnl), 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
       allTimePnlColor = computedAllTimePnl > 0 ? 'var(--green)' : computedAllTimePnl < 0 ? 'var(--red)' : 'var(--gray)';
     }
   };
@@ -450,15 +450,16 @@ function updateGlobalElements(walletData, initialDeposit, availableBank){
     .reduce((sum, [_, { qty, cost }]) => sum + qty * cost, 0)
 
   var computedPnl = params.isPercentage ? fixNumber((walletData.global.pnl / holdings) * 100, 2) : walletData.global.pnl;
-  sign = computedPnl >= 0 ? '+' : '-'
+  sign = computedPnl >= 0 ? '+' : '-';
+
   var pnlHTML  = false;
   var pnlColor = false;
 
-  if(isNaN(computedPnl) && false){
+  if(isNaN(computedPnl)){
     pnlHTML  = "ERROR";
     pnlColor = 'var(--red)';
   }else{
-    pnlHTML  = sign + fixNumber(computedPnl, 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
+    pnlHTML  = sign + fixNumber(Math.abs(computedPnl), 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
     pnlColor = computedPnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
   }
 
@@ -490,7 +491,8 @@ function generateAndPushTile(coin){
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
-  const formattedPnl = sign + params.isPercentage ? fixNumber((pnlNumber / coin.buy_value) * 100, 2) : fixNumber(Math.abs(pnlNumber), 2) ;
+  const formattedPnl = sign + params.isPercentage ? fixNumber(Math.abs(pnlNumber / coin.buy_value) * 100, 2) : fixNumber(Math.abs(pnlNumber), 2) ;
+  const symbol = params.isPercentage ? '%' : '$';
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
   const short = stableCoins[coin.quoteCurrency].short;
@@ -514,7 +516,7 @@ function generateAndPushTile(coin){
     $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
     $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
 
-    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + "$");
+    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + symbol);
     $(tileHtml).find(".pnl_data").css('color', pnlColor);
   }else{
     tileHtml = $(`
@@ -555,7 +557,7 @@ function generateAndPushTile(coin){
     $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
     $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
 
-    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + "$");
+    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + symbol);
     $(tileHtml).find(".pnl_data").css('color', pnlColor);
   };  
 
@@ -1237,7 +1239,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.0</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.2</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
