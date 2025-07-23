@@ -24,15 +24,14 @@ var isBacking = false, backerX = 0, backerY = 0;
 var current_page = "app", current_simulator_mode = "sell";
 var walletData = false, oldWalletData = false;
 var API = false, params = false;
-var isLogged = false
+
 var haveWebNotificationsBeenAccepted = false;
 var focusedCoin = false, coinPrices = false;
-var firstLog = true;
-var fullyLoaded = false;
-var initialDeposit = 0;
+var isLogged = false, firstLog = true, fullyLoaded = false;
+var initialDeposit = 0, availableFunds = 0;
 
 var positions = {};
-var availableFunds = 0;
+
 walletData = { coins: [], global: { bank:0, pnl:0 } };
 coinPrices = coinPrices || {};
 
@@ -64,13 +63,16 @@ function old_save(d){ localStorage.setItem("oldWallet",JSON.stringify(d)); }
 function params_read(){
   let d = localStorage.getItem("params");
   if(!d){
-    params = { filter:{var:"NAME",way:"ASC"} };
+    params = { filter:{var:"NAME",way:"ASC"}, isPercentage: false};
     $("#sortingVar").val("NAME"); $("#sortingWay").val("ASC");
     return params;
   }
+
   params = JSON.parse(d);
   $("#sortingVar").val(params.filter.var);
   $("#sortingWay").val(params.filter.way);
+  $(".parameter_percentage").css('backgroundColor', params.isPercentage ? 'var(--yellow)' : 'var(--light-color)');
+
   return params;
 }
 function params_save(d){ localStorage.setItem("params",JSON.stringify(d)); }
@@ -398,7 +400,7 @@ function filterHoldings(walletData, coinPrices, balances){
 function displayNewData(walletData){
   if(API['API'] == "noData" || walletData == false){return};
 
-  updateGlobalElements(walletData.global.bank, walletData.global.pnl, initialDeposit, availableFunds);
+  updateGlobalElements(walletData, initialDeposit, availableFunds);
 
   let filteredData = filterWalletData(walletData);
 
@@ -414,19 +416,59 @@ function displayNewData(walletData){
   });
 };
 
-function updateGlobalElements(bank, pnl, initialDeposit, availableBank){
-  const allTimePnl = fixNumber(bank - initialDeposit, 2);
+function updateGlobalElements(walletData, initialDeposit, availableBank){
+  // if(!fullyLoaded) return;
 
-  const allTimePnlColor = allTimePnl > 0 ? 'var(--green)' : allTimePnl < 0 ? 'var(--red)' : 'var(--gray)';
-  const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
+  var computedAllTimePnl = "ERROR";
+  var allTimePnlHTML = "ERROR";
+  var allTimePnlColor = "var(--gray)";
 
-  $('.bank_data').html(bank + ' <span class="currency">$</span>');
-  $('.available_data').html(fixNumber(availableBank, 2) + ' <span class="currency">$</span>');
+  var availableBankHTML = "ERROR";
+  var symbol = params.isPercentage ? '%' : '$';
+  var sign = "+";
 
-  $('.pnl_data').html(pnl + ' <span class="currency">$</span>');
+  if(initialDeposit != "ERROR"){
+    computedAllTimePnl = params.isPercentage ? fixNumber(((walletData.global.bank - initialDeposit) / initialDeposit) * 100, 2) : fixNumber(walletData.global.bank - initialDeposit, 2);
+    sign = computedAllTimePnl >= 0 ? '+' : '-'
+
+    if(isNaN(computedAllTimePnl)){
+      allTimePnlHTML  = "ERROR";
+      allTimePnlColor = 'var(--red)';
+    }else{
+      allTimePnlHTML = sign + fixNumber(computedAllTimePnl, 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
+      allTimePnlColor = computedAllTimePnl > 0 ? 'var(--green)' : computedAllTimePnl < 0 ? 'var(--red)' : 'var(--gray)';
+    }
+  };
+
+  if(availableBank != "ERROR"){
+    availableBankHTML = fixNumber(availableBank, 2, {limit: 2, val: 2}) + ' <span class="currency">$</span>'
+  }
+
+  var bankHTML = fixNumber(walletData.global.bank, 2, {limit: 2, val: 2}) + ' <span class="currency">$</span>';
+  var holdings = Object.entries(positions)
+    .filter(([key]) => key !== 'USDC') // Exclude USDC
+    .reduce((sum, [_, { qty, cost }]) => sum + qty * cost, 0)
+
+  var computedPnl = params.isPercentage ? fixNumber((walletData.global.pnl / holdings) * 100, 2) : walletData.global.pnl;
+  sign = computedPnl >= 0 ? '+' : '-'
+  var pnlHTML  = false;
+  var pnlColor = false;
+
+  if(isNaN(computedPnl) && false){
+    pnlHTML  = "ERROR";
+    pnlColor = 'var(--red)';
+  }else{
+    pnlHTML  = sign + fixNumber(computedPnl, 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
+    pnlColor = computedPnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
+  }
+
+  $('.bank_data').html(bankHTML);
+  $('.available_data').html(availableBankHTML);
+
+  $('.pnl_data').html(pnlHTML);
   $('.pnl_data').css('color', pnlColor);
 
-  $('.all_pnl_data').html(allTimePnl + ' <span class="currency">$</span>');
+  $('.all_pnl_data').html(allTimePnlHTML);
   $('.all_pnl_data').css('color', allTimePnlColor);
 };
 
@@ -448,7 +490,7 @@ function generateAndPushTile(coin){
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
-  const formattedPnl = sign + fixNumber(Math.abs(pnlNumber), 2) ;
+  const formattedPnl = sign + params.isPercentage ? fixNumber((pnlNumber / coin.buy_value) * 100, 2) : fixNumber(Math.abs(pnlNumber), 2) ;
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
   const short = stableCoins[coin.quoteCurrency].short;
@@ -1129,20 +1171,35 @@ function recomputePortfolio() {
   });
 
   if (allValid && firstLog) {
-    getFiatDeposit(API.API, API.SECRET).then(fiatDeposit => {
-      initialDeposit = fiatDeposit;
-
-      getReservedFundsUSDC(API.API, API.SECRET).then(reservedFunds => {
-        availableFunds = positions["USDC"].qty - reservedFunds;
-        updateGlobalElements(walletData.global.bank, walletData.global.pnl, initialDeposit, availableFunds);
-
-        $('.detail_elem_wrapper').css('pointer-events', 'all');
-        fetchStyleUpdate(false);
-        removeDummy();
-      });
-    });
+    try {
+      getFiatDeposit(API.API, API.SECRET).then(fiatDeposit => {
+        initialDeposit = fiatDeposit;
   
-    isApop(walletData, oldWalletData);
+        getReservedFundsUSDC(API.API, API.SECRET).then(reservedFunds => {
+          availableFunds = positions["USDC"].qty - reservedFunds;
+
+          fullyLoaded = true;
+          updateGlobalElements(walletData, initialDeposit, availableFunds);
+  
+          isApop(walletData, oldWalletData);
+          $('.detail_elem_wrapper').css('pointer-events', 'all');
+          fetchStyleUpdate(false);
+          removeDummy();
+        });
+      });
+    } catch (error) {
+      initialDeposit = "ERROR";
+      availableFunds = "ERROR";
+
+      fullyLoaded = true;
+      updateGlobalElements(walletData, initialDeposit, availableFunds);
+  
+      isApop(walletData, oldWalletData);
+      $('.detail_elem_wrapper').css('pointer-events', 'all');
+      fetchStyleUpdate(false);
+      removeDummy();
+    };
+    
     old_save(walletData);
 
     firstLog = false;
@@ -1288,7 +1345,7 @@ async function pnl(){
           comparison = parseFloat(coinA.ongoing_pnl) - parseFloat(coinB.ongoing_pnl);
           break;
         case "AMOUNT":
-          comparison = parseFloat(coinA.actual_value) - parseFloat(coinB.actual_value);
+          comparison = parseFloat(coinA.buy_value) - parseFloat(coinB.buy_value);
           break;
         default:
           comparison = 0;
@@ -1376,8 +1433,10 @@ async function pnl(){
 
   $('#putMaxInvest').on('click', function(){
     let coin = walletData.coins[getObjectKeyIndex(walletData.coins, "asset", focusedCoin)];
-    let funds = fixNumber(availableFunds, 2, {limit: 10, val: 2});
-    // let funds = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {limit: 10, val: 2});
+    let availableCurr = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {limit: 10, val: 2});
+    let maxSafe = availableFunds == "ERROR" ? availableCurr : availableFunds
+    
+    let funds = fixNumber(maxSafe, 2, {limit: 10, val: 2});
 
     $('#buyQuantity').val(funds);
     $('#buyQuantity').change();
@@ -1409,7 +1468,7 @@ async function pnl(){
   
   // UTILITY
 
-  if(isMobile){
+  if(isMobile && false){
     $('#IOSbackerUI').css('display', "block");
 
     $(document).on("touchstart", backerMousedownHandler);
@@ -1450,6 +1509,18 @@ async function pnl(){
 
   $('img').attr('draggable', false);
 
+  $('.parameter_percentage').on('click', function(){
+    if(params.isPercentage){
+      $(this).css('backgroundColor', 'var(--light-color)');
+    }else{
+      $(this).css('backgroundColor', 'var(--yellow)');
+    };
+
+    params.isPercentage = !params.isPercentage;
+    updateGlobalElements(walletData, initialDeposit, availableFunds);
+    params_save(params);
+  });
+
   $('#api_secret-val').on('input', function(){
     if($(this).val() == ""){
       $('#api_secret-val').css('fontSize', '16px');
@@ -1463,11 +1534,13 @@ async function pnl(){
   });
 
   $('.global_elem_scrollable').on('scroll', function(e){
-    let maxScroll = $(this).getStyleValue('width') + $(this).getStyleValue('gap');
-    if($(this).scrollLeft() == 0){
+    let maxScroll = ($(this).getStyleValue('width') + $(this).getStyleValue('gap')).toFixed(0);
+    let scroll = $(this).scrollLeft().toFixed(0);
+
+    if(scroll <= 0){
       $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'white');
       $(this).parent().find(".global_elem_indicator_bar").eq(1).css('backgroundColor', 'black');
-    }else if($(this).scrollLeft() == maxScroll){
+    }else if(scroll >= maxScroll){
       $(this).parent().find(".global_elem_indicator_bar").eq(1).css('backgroundColor', 'white');
       $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'black');
     };
