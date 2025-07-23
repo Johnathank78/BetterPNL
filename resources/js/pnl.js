@@ -232,7 +232,7 @@ async function getFiatDeposit(apiKey, apiSecret) {
         ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
         : sum,
     0
-  );
+  ) ?? 0;
 
   let sum_withdraw = withdraw.data.reduce(
     (sum, r) =>
@@ -240,7 +240,7 @@ async function getFiatDeposit(apiKey, apiSecret) {
         ? sum + Math.abs(parseFloat(r.indicatedAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
         : sum,
     0
-  );
+  ) ?? 0;
 
   let sum_deposit2 = deposit2.data.reduce(
     (sum, r) =>
@@ -248,7 +248,7 @@ async function getFiatDeposit(apiKey, apiSecret) {
         ? sum + Math.abs(parseFloat(r.sourceAmount)) * (coinPrices[r.fiatCurrency + "USDC"] ?? 1)
         : sum,
     0
-  );
+  ) ?? 0;
 
   return sum_deposit + sum_deposit2 - sum_withdraw;
 }
@@ -1239,7 +1239,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.4</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.5</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
