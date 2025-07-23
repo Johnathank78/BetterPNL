@@ -460,7 +460,7 @@ function updateGlobalElements(walletData, initialDeposit, availableBank){
     pnlColor = 'var(--red)';
   }else{
     pnlHTML  = sign + fixNumber(Math.abs(computedPnl), 2, {limit: 2, val: 2}) + ' <span class="currency">'+symbol+'</span>';
-    pnlColor = computedPnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--gray)';
+    pnlColor = computedPnl > 0 ? 'var(--green)' : computedPnl < 0 ? 'var(--red)' : 'var(--gray)';
   }
 
   $('.bank_data').html(bankHTML);
@@ -491,8 +491,8 @@ function generateAndPushTile(coin){
 
   // Determine the sign and color based on the PnL value
   const sign = pnlNumber >= 0 ? '+' : '-';
-  const formattedPnl = sign + params.isPercentage ? fixNumber(Math.abs(pnlNumber / coin.buy_value) * 100, 2) : fixNumber(Math.abs(pnlNumber), 2) ;
   const symbol = params.isPercentage ? '%' : '$';
+  const formattedPnl = params.isPercentage ? fixNumber(Math.abs(pnlNumber / coin.buy_value) * 100, 2) : fixNumber(Math.abs(pnlNumber), 2) ;
   const pnlColor = pnlNumber > 0 ? 'var(--green)' : pnlNumber < 0 ? 'var(--red)' : 'var(--gray)';
 
   const short = stableCoins[coin.quoteCurrency].short;
@@ -516,7 +516,7 @@ function generateAndPushTile(coin){
     $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
     $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
 
-    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + symbol);
+    $(tileHtml).find(".pnl_data").text(sign + formattedPnl + " " + symbol);
     $(tileHtml).find(".pnl_data").css('color', pnlColor);
   }else{
     tileHtml = $(`
@@ -557,7 +557,7 @@ function generateAndPushTile(coin){
     $(tileHtml).find(".mean_buy").text(fixNumber(coin.mean_buy, 2, {limit: 10, val: 2}) + " " + short);
     $(tileHtml).find(".buy_value").text(fixNumber(coin.buy_value, 2) + " " + "$");
 
-    $(tileHtml).find(".pnl_data").text(formattedPnl + " " + symbol);
+    $(tileHtml).find(".pnl_data").text(sign + formattedPnl + " " + symbol);
     $(tileHtml).find(".pnl_data").css('color', pnlColor);
   };  
 
@@ -1239,7 +1239,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.2</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v2.4</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
