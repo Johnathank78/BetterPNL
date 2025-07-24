@@ -225,7 +225,7 @@ body{
     cursor: pointer;
 }
 
-.pnl_data, .all_pnl_data{
+.ongoingPnl_data, .all_pnl_data{
     color: var(--gray);
 }
 
@@ -592,6 +592,11 @@ body{
     width: 100%;
 }
 
+.detail_elem_header .pnl_data{
+    font-size: 15px;  
+    display: none; 
+}
+
 .detail_select_wrapper{
     display: flex;
     flex-direction: row;
@@ -654,7 +659,6 @@ body{
     gap: 15px;
 
     width: calc(100% - 30px);
-    height: calc(200px - 30px);
 
     border-radius: 8px !important;
     background-color: var(--light-color);
@@ -686,6 +690,8 @@ body{
     overflow: hidden;
     padding: 8px;
 
+    height: 45px;
+
     background-color: var(--superLight-color);
     border-radius: 7px;
 }
@@ -703,7 +709,7 @@ body{
 
 .detail_elem_amount{
     font-size: 15px;
-    opacity: .6;
+    color: var(--gray);
 }
 
 .refresh_container{
@@ -886,7 +892,7 @@ body{
 }
 
 .skeleton > *{
-    display: none;
+    opacity: 0;
 }
 
 /* The shimmering gradient overlay */
