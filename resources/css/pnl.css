@@ -229,6 +229,18 @@ body{
     color: var(--gray);
 }
 
+.minifier{
+    text-align: center;
+    line-height: 30px;
+
+    font-size: 18px;
+    height: 30px;
+    width: 30px;
+
+    border-radius: 8px;
+    background-color: var(--superLight-color);
+}
+
 .detail_connect{
     position: absolute;
 
