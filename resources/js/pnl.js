@@ -155,24 +155,36 @@ async function proxySigned(apiKey, endpoint, queryString){
 // 4) PUBLIC & PRIVATE WEBSOCKETS
 // ------------------------------------------------------
 
-function connectPriceWS(assets, onPrice){
-  if(priceWs) priceWs.close(); if(!assets.length) return;
-  const streams=assets.map(a=>a.toLowerCase()+"usdc@ticker").join("/");
-  priceWs=new WebSocket(`${PUB_WS}?streams=${streams}`);
-  priceWs.onmessage=e=>{ const {data}=JSON.parse(e.data); onPrice(data.s,parseFloat(data.c)); };
-  priceWs.onerror=console.error; priceWs.onclose=()=>console.warn("Public WS closed");
-}
-
 async function createListenKey(apiKey){ return fetchJSON(`${WORKER_URL}/listenKey`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey})}).then(x=>x.listenKey);}    
 
 async function keepAliveKey(apiKey,lk){ return fetchJSON(`${WORKER_URL}/listenKey`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,listenKey:lk})}); }
 
 async function connectUserWS(apiKey, handlers){
   if(userWs) userWs.close(); const lk=await createListenKey(apiKey);
-  userWs=new WebSocket(`${USER_WS}/${lk}`);
+
+  try {
+    userWs=new WebSocket(`${USER_WS}/${lk}`);
+  } catch (error) {
+    throw error
+  }
+
   userWs.onmessage=e=>{ const msg=JSON.parse(e.data); switch(msg.e){ case"outboundAccountPosition":handlers.onBalances(msg.B);break; case"executionReport":handlers.onOrderUpdate(msg);break; case"balanceUpdate":handlers.onBalanceUpdate(msg);break; default:console.debug(msg);} };
   userWs.onerror=console.error; userWs.onclose=()=>console.warn("User WS closed");
   setInterval(()=>keepAliveKey(apiKey,lk),30*60*1000);
+}
+
+function connectPriceWS(assets, onPrice){
+  if(priceWs) priceWs.close(); if(!assets.length) return;
+  const streams=assets.map(a=>a.toLowerCase()+"usdc@ticker").join("/");
+
+  try {
+    priceWs=new WebSocket(`${PUB_WS}?streams=${streams}`);
+  } catch (error) {
+    throw error
+  }
+
+  priceWs.onmessage=e=>{ const {data}=JSON.parse(e.data); onPrice(data.s,parseFloat(data.c)); };
+  priceWs.onerror=console.error; priceWs.onclose=()=>console.warn("Public WS closed");
 }
 
 async function getFiatHistoryFirstPage(apiKey, apiSecret, transactionType) {
@@ -546,12 +558,18 @@ function generateAndPushTile(coin){
 
   var tileHtml = false;
   let focusedTile = $('.detail_elem_wrapper').find('.detail_elem').filter((_, el) => $(el).find(".detail_elem_name").text() == coin.asset);
+  let minified = false;
 
   if(focusedTile.length == 1){
     tileHtml = focusedTile.eq(0);
+    minified = $(tileHtml).data('minified');
 
     $(tileHtml).find(".detail_elem_name").text(coin.asset);
-    $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
+    $(tileHtml).find(".detail_elem_amount").text(!minified 
+      ? fixNumberBis(coin.amount, 10) + " | " + prop + "%"
+      : prop + "% | "
+    );
+
     $(tileHtml).find(".detail_elem_price").text(fixNumber(coin.price, 2, {limit: 10, val: 2}) + " " + short);
 
     $(tileHtml).find(".actual_value").text(fixNumber(coin.actual_value, 2) + " " + "$");
@@ -560,6 +578,8 @@ function generateAndPushTile(coin){
 
     $(tileHtml).find(".pnl_data").text(sign + formattedPnl + " " + symbol);
     $(tileHtml).find(".pnl_data").css('color', pnlColor);
+
+    $(tileHtml).find('.detail_elem_header').find(".pnl_data").css('display', minified ? "inline-block" : "none");
   }else{
     tileHtml = $(`
         <div class="detail_elem `+isskeleton+`">
@@ -591,6 +611,7 @@ function generateAndPushTile(coin){
         </div>
     `)
 
+    $(tileHtml).data("minified", minified);
     $(tileHtml).find(".detail_elem_name").text(coin.asset);
     $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
     $(tileHtml).find(".detail_elem_price").text(fixNumber(coin.price, 2, {limit: 10, val: 2}) + " " + short);
@@ -642,6 +663,8 @@ function clearData(disconnect){
     $('.global_elem.bank .elem_data').html('0.00' + ' <span class="currency">$</span>');
     $('.global_elem.pnl .elem_data').html('0.00' + ' <span class="currency">$</span>');
     $('.pnl_data').css('color', 'var(--gray)');
+
+    $('.detail_elem_wrapper').css('pointer-events', 'all');
     
     if(disconnect){
       $('.detail_connect').text("CONNECT TO API");
@@ -663,9 +686,9 @@ function fetchStyleUpdate(fetching, refresh=false){
     $('.elem_data').not('.skeleton').addClass('skeleton');
 
     if(!refresh){
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
-      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">dummy</span><span class="detail_elem_amount"></span></span><span class="detail_elem_price"></span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data"></span></div><div class="detail_subElem"><span class="detail_subElem_title"></span><span class="detail_subElem_data pnl_data" style="color: var(--green);"></span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">DUMY</span><span class="detail_elem_amount">150.5555252 | 33%</span><span class="pnl_data" style="color: var(--green);">+150.00 $</span></span><span class="detail_elem_price">220.00 $</span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title">ACTUAL VALUE</span><span class="detail_subElem_data">1000.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY PRICE</span><span class="detail_subElem_data">200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY VALUE</span><span class="detail_subElem_data">1200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">ONGOIN PNL</span><span class="detail_subElem_data pnl_data" style="color: var(--green);">+150 $</span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">DUMY</span><span class="detail_elem_amount">150.5555252 | 33%</span><span class="pnl_data" style="color: var(--green);">+150.00 $</span></span><span class="detail_elem_price">220.00 $</span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title">ACTUAL VALUE</span><span class="detail_subElem_data">1000.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY PRICE</span><span class="detail_subElem_data">200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY VALUE</span><span class="detail_subElem_data">1200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">ONGOIN PNL</span><span class="detail_subElem_data pnl_data" style="color: var(--green);">+150 $</span></div></div></div>'))
+      $('.detail_elem_wrapper').append($('<div class="detail_elem skeleton"><div class="detail_elem_header"><span class="detail_elem_title"><span class="detail_elem_name">DUMY</span><span class="detail_elem_amount">150.5555252 | 33%</span><span class="pnl_data" style="color: var(--green);">+150.00 $</span></span><span class="detail_elem_price">220.00 $</span></div><div class="detail_elem_body"><div class="detail_subElem"><span class="detail_subElem_title">ACTUAL VALUE</span><span class="detail_subElem_data">1000.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY PRICE</span><span class="detail_subElem_data">200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">BUY VALUE</span><span class="detail_subElem_data">1200.00 $</span></div><div class="detail_subElem"><span class="detail_subElem_title">ONGOIN PNL</span><span class="detail_subElem_data pnl_data" style="color: var(--green);">+150 $</span></div></div></div>'))
     };
 
     $('.refresh_container').css('opacity', '.3');
@@ -1113,16 +1136,24 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
     }
   }));
 
-  // 4) initial draw
-  recomputePortfolio();
-
   // 5) start real-time streams
-  connectPriceWS(Object.keys(positions), onPrice);
-  connectUserWS(apiKey, {
-    onBalances: handleAccountPosition,
-    onOrderUpdate: handleOrderUpdate,
-    onBalanceUpdate: handleBalanceUpdate
-  });
+  (async () => {
+    try {
+      await Promise.all(
+        connectPriceWS(Object.keys(positions), onPrice),
+        connectUserWS(apiKey, {
+          onBalances: handleAccountPosition,
+          onOrderUpdate: handleOrderUpdate,
+          onBalanceUpdate: handleBalanceUpdate
+        })
+      );
+
+      bottomNotification('connected');
+    } catch (err) {
+      bottomNotification("fetchError"); 
+      clearData(false);
+    }
+  })();
 }
 
 // ------------------------------------------------------
@@ -1289,20 +1320,13 @@ async function getDataAndDisplay(refresh=false) {
   if(refresh){ displayNewData(walletData); return; }
   fetchStyleUpdate(true,false);
 
-  try{
-    await initRealTime(
-      API.API, API.SECRET,
-      (asset, price)=>{
-        coinPrices[asset]=price;
-        recomputePortfolio();
-      }
-    );
-
-    bottomNotification('connected');
-  }catch(e){ 
-    bottomNotification("fetchError"); 
-    clearData(false);
-  }
+  await initRealTime(
+    API.API, API.SECRET,
+    (asset, price)=>{
+      coinPrices[asset]=price;
+      recomputePortfolio();
+    }
+  );
 }
 
 // ------------------------------------------------------
@@ -1581,8 +1605,8 @@ async function pnl(){
   });
 
   $('.global_elem_scrollable').on('scroll', function(e){
-    let maxScroll = ($(this).getStyleValue('width') + $(this).getStyleValue('gap')).toFixed(0);
-    let scroll = $(this).scrollLeft().toFixed(0);
+    let maxScroll = Math.floor($(this).getStyleValue('width') + $(this).getStyleValue('gap'));
+    let scroll = Math.floor($(this).scrollLeft());
 
     if(scroll <= 0){
       $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'white');
@@ -1592,10 +1616,22 @@ async function pnl(){
       $(this).parent().find(".global_elem_indicator_bar").eq(0).css('backgroundColor', 'black');
     };
 
-    if($(this).parent().is('.pnl') && (scroll == 0 || scroll == maxScroll)){
-      params.onLoadPnlType = scroll == 0 ? "ongoing" : "allTime";
+    if($(this).parent().is('.pnl') && (scroll <= 0 || scroll >= maxScroll)){
+      params.onLoadPnlType = scroll <= 0 ? "ongoing" : "allTime";
       params_save(params); 
     };
+  });
+
+  $(document).on('click', '.detail_elem', function(){
+    let minified = $(this).data('minified') ?? false;
+
+    if(!minified){
+      $(this).find('.detail_elem_body').css('display', 'none');
+    }else{
+      $(this).find('.detail_elem_body').css('display', 'grid');
+    };
+
+    $(this).data('minified', !minified);
   });
 
   // INIT
