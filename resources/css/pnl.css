@@ -891,13 +891,14 @@ body{
 }
 
 .skeleton > *{
-    opacity: 0;
+    opacity: 0 !important;
 }
 
 /* The shimmering gradient overlay */
 .skeleton::after {
     content: "";
     position: absolute;
+
     top: 0;
     left: -150%;
     width: 50%;
