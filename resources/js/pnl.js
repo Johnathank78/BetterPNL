@@ -8,12 +8,13 @@ jQuery.fn.getStyleValue = function(prop){
 // ------------------------------------------------------
 // CONFIG & GLOBALS
 // ------------------------------------------------------
-// const WORKER_URL    = "https://johnathan-denobetterp-43.deno.dev";
+
 const WORKER_URL    = "https://johnathan-denobetterp-43-rehbv5e0phsa.deno.dev";
 const PUB_WS        = "wss://stream.binance.com:9443/stream";
 const USER_WS       = "wss://stream.binance.com:9443/ws";
 
 let priceWs = null, userWs = null;
+const vHeightMax = 208.5 - 30, vHeightMin = 48.5 - 30;
 
 // FEEs, UI flags, timeouts, data holders
 const takerFEE = 0.0001, makerFEE = 0.0001;
@@ -63,7 +64,7 @@ function old_save(d){ localStorage.setItem("oldWallet",JSON.stringify(d)); }
 function params_read(){
   let d = localStorage.getItem("params");
   if(!d){
-    params = { filter:{var:"NAME",way:"ASC"}, isPercentage: false, onLoadPnlType: "ongoing"};
+    params = { filter:{var:"NAME",way:"ASC"}, isPercentage: false, onLoadPnlType: "ongoing", minified: {}};
     $("#sortingVar").val("NAME"); $("#sortingWay").val("ASC");
     return params;
   }
@@ -612,7 +613,9 @@ function generateAndPushTile(coin){
         </div>
     `)
 
-    $(tileHtml).data("minified", minified);
+    $(tileHtml).data("minified", params.minified[coin.asset]);
+    minifyTile(tileHtml, params.minified[coin.asset], false);
+
     $(tileHtml).find(".detail_elem_name").text(coin.asset);
     $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
     $(tileHtml).find(".detail_elem_price").text(fixNumber(coin.price, 2, {limit: 10, val: 2}) + " " + short);
@@ -741,6 +744,35 @@ function orderTiles(mode, way){
     return way === "DESC" ? -comparison : comparison;
   }).appendTo('.detail_elem_wrapper');
 };
+
+function minifyTile(elem, minify, animate){
+  if(minify){
+    if(animate){
+      $(elem).animate({
+        height: vHeightMin,
+      }, 300, function(){
+        $(elem).find('.detail_elem_body').css({'display': 'none', 'opacity': 0});
+      })
+    }else{
+      $(elem).css({ height: vHeightMin });
+      $(elem).find('.detail_elem_body').css({'display': 'none', 'opacity': 0});
+    };
+  }else{
+    if(animate){
+      $(elem).animate({
+        height: vHeightMax,
+      }, 300, function(){
+        $(elem).find('.detail_elem_body').css('display', 'grid');
+        $(elem).find('.detail_elem_body').animate({
+          opacity: 1,
+        }, 75)
+      })
+    }else{
+      $(elem).css({ height: vHeightMax });
+      $(elem).find('.detail_elem_body').css({'display': 'grid', 'opacity': 1});
+    };
+  };
+}
 
 // NAVIGATION
 
@@ -1207,6 +1239,16 @@ function removeDummy(){
   .filter((_, el) => $(el).find(".detail_elem_name").text() == "dummy").remove();
 }
 
+function clearMinify(coins){
+  const coinAssets = new Set(coins.map(coin => coin.asset));
+  
+  for (const key of Object.keys(params.minified)) {
+    if (!coinAssets.has(key)) {
+      delete params.minified[key];
+    }
+  }
+}
+
 function recomputePortfolio() {
   let coins = [], bank = 0, pnlSum = 0;
 
@@ -1273,6 +1315,9 @@ function recomputePortfolio() {
   if(allValid){
     old_save(walletData);
 
+    clearMinify(walletData.coins);
+    params_save(params);
+
     if (firstLog) {
       firstLog = false;
 
@@ -1335,7 +1380,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v3.1</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v3.5</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
@@ -1625,14 +1670,18 @@ async function pnl(){
 
   $(document).on('click', '.detail_elem', function(){
     let minified = $(this).data('minified') ?? false;
+    let name = $(this).find('.detail_elem_name').text();
 
     if(!minified){
-      $(this).find('.detail_elem_body').css('display', 'none');
+      params.minified[name] = true;
+      minifyTile(this, true, true);
     }else{
-      $(this).find('.detail_elem_body').css('display', 'grid');
+      params.minified[name] = false;
+      minifyTile(this, false, true);
     };
 
     $(this).data('minified', !minified);
+    params_save(params);
   });
 
   // INIT
