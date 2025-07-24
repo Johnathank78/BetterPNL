@@ -587,6 +587,7 @@ function generateAndPushTile(coin){
                 <span class="detail_elem_title">
                     <span class="detail_elem_name"></span>
                     <span class="detail_elem_amount"></span>
+                    <span class="pnl_data"></span>
                 </span>
                 <span class="detail_elem_price"></span>
             </div>
@@ -664,7 +665,7 @@ function clearData(disconnect){
     $('.global_elem.pnl .elem_data').html('0.00' + ' <span class="currency">$</span>');
     $('.pnl_data').css('color', 'var(--gray)');
 
-    $('.detail_elem_wrapper').css('pointer-events', 'all');
+    $(".detail_elem_wrapper").css("pointer-events", "all");
     
     if(disconnect){
       $('.detail_connect').text("CONNECT TO API");
@@ -1136,24 +1137,17 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
     }
   }));
 
-  // 5) start real-time streams
-  (async () => {
-    try {
-      await Promise.all(
-        connectPriceWS(Object.keys(positions), onPrice),
-        connectUserWS(apiKey, {
-          onBalances: handleAccountPosition,
-          onOrderUpdate: handleOrderUpdate,
-          onBalanceUpdate: handleBalanceUpdate
-        })
-      );
+  // 4) initial draw
+  recomputePortfolio();
 
-      bottomNotification('connected');
-    } catch (err) {
-      bottomNotification("fetchError"); 
-      clearData(false);
-    }
-  })();
+  // 5) start real-time streams
+
+  connectPriceWS(Object.keys(positions), onPrice);
+  connectUserWS(apiKey, {
+    onBalances: handleAccountPosition,
+    onOrderUpdate: handleOrderUpdate,
+    onBalanceUpdate: handleBalanceUpdate
+  });
 }
 
 // ------------------------------------------------------
@@ -1320,13 +1314,20 @@ async function getDataAndDisplay(refresh=false) {
   if(refresh){ displayNewData(walletData); return; }
   fetchStyleUpdate(true,false);
 
-  await initRealTime(
-    API.API, API.SECRET,
-    (asset, price)=>{
-      coinPrices[asset]=price;
-      recomputePortfolio();
-    }
-  );
+  try{
+    await initRealTime(
+      API.API, API.SECRET,
+      (asset, price)=>{
+        coinPrices[asset]=price;
+        recomputePortfolio();
+      }
+    );
+
+    bottomNotification('connected');
+  }catch(e){ 
+    bottomNotification("fetchError"); 
+    clearData(false);
+  }
 }
 
 // ------------------------------------------------------
@@ -1334,7 +1335,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v3.0</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .3; color: white;">v3.1</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
