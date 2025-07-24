@@ -614,7 +614,7 @@ function generateAndPushTile(coin){
     `)
 
     $(tileHtml).data("minified", params.minified[coin.asset]);
-    minifyTile(tileHtml, params.minified[coin.asset], false);
+    minifyTile(tileHtml, params.minified[coin.asset] ?? false, false);
 
     $(tileHtml).find(".detail_elem_name").text(coin.asset);
     $(tileHtml).find(".detail_elem_amount").text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
@@ -1380,7 +1380,7 @@ async function getDataAndDisplay(refresh=false) {
 // ------------------------------------------------------
 
 async function pnl(){
-  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v3.5</span>'))
+  $('.simulator').append($('<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v3.6</span>'))
 
   // NAVIGATION
   $('.blurBG').on('click', function(e){
