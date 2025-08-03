@@ -494,9 +494,6 @@ function computeAveragePrice(trades) {
 
   let positionQty = 0.0;
   let positionCost = 0.0;
-  let asset = trades[0]?.symbol;
-
-  console.log(trades.filter(t => t.symbol == "ETHUSDC"))
 
   for (const t of trades) {
     const qty = parseFloat(t.qty);
