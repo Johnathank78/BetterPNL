@@ -494,6 +494,9 @@ function computeAveragePrice(trades) {
 
   let positionQty = 0.0;
   let positionCost = 0.0;
+  let asset = trades[0]?.symbol;
+
+  console.log(trades.filter(t => t.symbol == "ETHUSDC"))
 
   for (const t of trades) {
     const qty = parseFloat(t.qty);
@@ -503,11 +506,24 @@ function computeAveragePrice(trades) {
       positionQty += qty;
       positionCost += qty * price;
     } else {
-      if (positionQty <= 0) continue;
-      const avgCost = positionCost / positionQty;
-      const sellQty = qty;
+      const avgCost = positionQty ? positionCost / positionQty : 0;
+
+      /* HOT-FIX guard: clamp the sell size to what we actually own */
+      const sellQty   = Math.min(qty, positionQty);   // never larger
+      const overshoot = qty - sellQty;                // how much we *couldn't* cover
+
+      // remove only the part we really had
+      positionQty  -= sellQty;
       positionCost -= sellQty * avgCost;
-      positionQty -= sellQty;
+
+      // if the trade tried to sell more than we owned, reset the deficit to 0
+      if (overshoot > 1e-12) {
+        console.warn(
+          `Oversold by ${overshoot} ETH on trade ${t.id}. `
+        + `Flushed position to zero instead of going negative.`
+        );
+        // you could also keep a "short" bucket here if you ever want true shorts
+      }
     }
   }
 
@@ -1716,7 +1732,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v3.7</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v3.9</span>'
     )
   );
 
