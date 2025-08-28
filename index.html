@@ -181,6 +181,27 @@
 
                 <span class="simulator_masterInfo">MEAN BUY : <span class="simulator_meanBuy"></span> | BUY QUANTITY : <span class="simulator_buyQuant"></span></span>
             </div>
+
+            <div class="blurItem_wrapper tradeHistory_wrapper">
+                <div class="tradeHistory_firstLine">
+                    <span class="tradeHistory_mainText noselect">TRADES</span>
+                    <div class="tradeHistory_firstLine_rightBlock">
+                        <select name="historyCoin" id="historyCoin" class="historySelect">
+                            <option value="ALL">ALL</option>
+                            <option value="SOL">SOL</option>
+                            <option value="ETH">ETH</option>
+                            <option value="BERA">BERA</option>
+                        </select>
+                        <select name="buyOrSell" id="buyOrSell" class="historySelect">
+                            <option value="ALL">ALL</option>
+                            <option value="BUY">BUY</option>
+                            <option value="SELL">SELL</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="tradeHistory_thirdLine"></div>
+            </div>
         </div>
 
         <div class="app_wrapper">
@@ -251,6 +272,7 @@
             </div>
 
             <div class="refresh_container">
+                <span class="tradeHistory">TRADES</span>
                 <span class="simulator">SIMULATE</span>
             </div>
         </div>
