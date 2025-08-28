@@ -300,7 +300,11 @@ async function keepAliveKey(apiKey, lk) {
 }
 
 async function connectUserWS(apiKey, handlers) {
-  if (userWs) userWs.close();
+  if (userWs) {
+    try { if (userWs._ka) clearInterval(userWs._ka); } catch {}
+    try { userWs.close(); } catch {}
+  }
+
   const lk = await createListenKey(apiKey);
 
   try {
@@ -309,26 +313,41 @@ async function connectUserWS(apiKey, handlers) {
     throw error;
   }
 
+  userWs._lk = lk;
+
+  // keepAlive toutes 25 min (sécurité), + un ping immédiat à l'ouverture
+  const ping = () => keepAliveKey(apiKey, userWs._lk).catch(console.warn);
+  userWs.onopen = ping;
+  userWs._ka = setInterval(ping, 25 * 60 * 1000);
+
   userWs.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     switch (msg.e) {
-      case "outboundAccountPosition":
-        handlers.onBalances(msg.B);
-        break;
-      case "executionReport":
-        handlers.onOrderUpdate(msg);
-        break;
-      case "balanceUpdate":
-        handlers.onBalanceUpdate(msg);
-        break;
-      default:
-        console.debug(msg);
+      case "outboundAccountPosition": handlers.onBalances(msg.B); break;
+      case "executionReport":         handlers.onOrderUpdate(msg); break;
+      case "balanceUpdate":           handlers.onBalanceUpdate(msg); break;
+      default:                        console.debug(msg);
     }
   };
-  userWs.onerror = console.error;
-  userWs.onclose = () => console.warn("User WS closed");
-  setInterval(() => keepAliveKey(apiKey, lk), 30 * 60 * 1000);
+
+  userWs.onerror = (err) => console.error("User WS error:", err);
+
+  userWs.onclose = () => {
+    // stoppe le keepAlive associé à CETTE socket
+    try { if (userWs && userWs._ka) clearInterval(userWs._ka); } catch {}
+
+    // auto-reconnect propre si l'app est visible & loggée
+    if (document.visibilityState === "visible" && isLogged) {
+      setTimeout(() => {
+        // évite les doubles reconnects si une autre instance a été ouverte entre-temps
+        if (document.visibilityState === "visible" && isLogged) {
+          connectUserWS(apiKey, handlers).catch(console.error);
+        }
+      }, 2000);
+    }
+  };
 }
+
 
 function connectPriceWS(assets, onPrice) {
   if (priceWs) priceWs.close();
@@ -1851,7 +1870,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.0</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.1</span>'
     )
   );
 
@@ -1916,25 +1935,27 @@ async function pnl() {
 
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState === "hidden") {
-      if (priceWs) priceWs.close();
-      if (userWs) userWs.close();
-    } else if (document.visibilityState === "visible") {
       try {
-        if (initialDeposit == "ERROR" || availableFunds == "ERROR") {
-          $(".all_pnl_data, .available_data").addClass("skeleton");
-          firstLog = true;
-        }
-
-        await initRealTime(API.API, API.SECRET, (asset, price) => {
-          coinPrices[asset] = price;
-          recomputePortfolio();
-        });
-      } catch (e) {
-        bottomNotification("fetchError");
-        clearData(false);
-      }
+        if (userWs && userWs._ka) { clearInterval(userWs._ka); userWs._ka = null; }
+        if (userWs) userWs.close();
+      } catch {}
+      try { if (priceWs) priceWs.close(); } catch {}
+      return;
+    }
+  
+    // visible
+    try {
+      await initRealTime(API.API, API.SECRET, (asset, price) => {
+        coinPrices[asset] = price;
+        recomputePortfolio();
+      });
+      bottomNotification("connected");
+    } catch (e) {
+      console.error("Proxy/Init error (visible):", e);
+      clearData("error"); // affiche FETCH RETRY + rouge
     }
   });
+
 
   // FILTERS & FETCHING
 
