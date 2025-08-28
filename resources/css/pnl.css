@@ -1,3 +1,4 @@
+
 :root{
     --dark-color: #181a20;
     --medium-color: #1e2329;
@@ -129,7 +130,7 @@ body{
     display: none;
 }
 
-.simulator_firstLine{
+.simulator_firstLine, .tradeHistory_firstLine{
     display: flex;
     flex-direction: row;
 
@@ -138,7 +139,13 @@ body{
     width: 100%;
 }
 
-.simulator_secondLine{
+.tradeHistory_firstLine_rightBlock{
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.simulator_secondLine, .tradeHistory_secondLine{
     display: flex;
     flex-direction: column;
 
@@ -205,6 +212,26 @@ body{
     border-radius: 8px;
 }
 
+.historySelect{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-color: var(--light-color);
+
+    padding: 6px;
+    height: 35px;
+    
+    color: white;
+    
+    font-weight: 500;
+    font-size: 16px;
+
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+}
+
 #coin_selector{
     display: flex;
     align-items: center;
@@ -237,8 +264,11 @@ body{
     height: 30px;
     width: 30px;
 
+    color: white;
+
     border-radius: 8px;
     background-color: var(--superLight-color);
+    cursor: pointer;
 }
 
 .detail_connect{
@@ -735,14 +765,152 @@ body{
     margin-top: auto;
 }
 
-.simulator{
+.tradeHistory_wrapper{
+    height: 65vh;
+    gap: 15px;
+
+    padding: 20px;
+}
+
+.tradeHistory_thirdLine{
+    display: flex;
+    flex-direction: column;
+    
+    width: 100%;
+    max-height: 90%;
+
+    overflow-y: scroll;
+
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+.tradeHistory_thirdLine::-webkit-scrollbar{
+    display: none;
+}
+
+.tradeHistory_thirdLine > .tradeHistory_item:not(:last-child) {
+    border-bottom: 1px solid rgba(255,255,255,.3); /* Change the color and style as needed */
+}
+
+.tradeHistory_mainText{
+    font-size: 22px;
+}
+
+.tradeHistory_item{
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    
+    width: 100%;
+    margin-top: 15px;
+    padding-bottom: 15px;
+}
+
+.tradeHistory_item_header{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.tradeHistory_item_headerFirstLine{
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    
+    width: 100%;
+}
+
+.tradeHistory_item_headerFirstLine_leftPart{
+    display: flex;
+    flex-direction: row;
+
+    align-items: baseline;
+
+    gap: 5px;
+}
+
+.tradeHistory_item_headerSecondLine{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+
+    width: 100%;
+}
+
+
+.tradeHistory_item_currLabel{
+    font-size: 20px;
+    color: white;
+}
+
+.tradeHistory_item_currAmount{
+    font-size: 16px;
+    color: white;
+    opacity: .45;
+}
+
+.tradeHistory_item_side{
+    font-size: 14px;   
+}
+
+.tradeHistory_item_date{
+    font-size: 13px;
+    color: white;
+    opacity: .45;
+}
+
+.tradeHistory_item_body{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tradeHistory_item_lineWrapper{
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.tradeHistory_item_lineLabel{
+    font-size: 16px;
+    color: white;
+    opacity: .45;
+}
+
+.tradeHistory_item_lineValue{
+    font-size: 16px;
+    color: white;
+}
+
+.tradeHistory{
     display: flex;
 
     align-items: center;
     justify-content: center;
 
     height: 100%;
-    width: calc(100% - 20px);
+    width: calc(25% - 20px);
+    padding: 0px 10px;
+
+    font-size: 16px;
+    color: white;
+
+    background-color: var(--light-color);
+    border-radius: 8px;
+
+    cursor: pointer;
+}
+
+.simulator{
+    flex-grow: 1;
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    height: 100%;
     padding: 0px 10px;
 
     font-size: 16px;
