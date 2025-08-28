@@ -20,9 +20,9 @@ const vHeightMax = 208.5 - 30,
   vHeightMin = 48.5 - 30;
 
 // FEEs, UI flags, timeouts, data holders
-const DUST_USDC = 1;     // valeur résiduelle max en USDC pour considérer "à peu près 0"
+const DUST_USDC = 1; // valeur résiduelle max en USDC pour considérer "à peu près 0"
 const takerFEE = 0.0001,
-makerFEE = 0.0001;
+  makerFEE = 0.0001;
 const isMobile = /Mobi/.test(navigator.userAgent);
 const DRAG_THRESHOLD = 15,
   MAX_PULL = 30;
@@ -38,6 +38,8 @@ var API = false,
   params = false;
 
 var haveWebNotificationsBeenAccepted = false;
+var tradeFocusedCoin = "ALL";
+var buyOrSell = "ALL"; 
 var focusedCoin = false,
   coinPrices = false;
 var isLogged = false,
@@ -128,6 +130,21 @@ function params_save(d) {
 // 2) UTILITIES
 // ------------------------------------------------------
 
+function formatTimestamp(timestamp) {
+  const date = new Date(timestamp);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-11
+  const day = String(date.getDate()).padStart(2, "0");
+
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  // return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
 async function primeStableConversions() {
   const targets = Object.keys(stableCoins).filter((s) => s !== "USDC");
   await Promise.all(
@@ -158,9 +175,14 @@ function splitSymbol(symbol) {
 function getQuoteToUSDC(quote) {
   if (quote === "USDC") return 1;
   const fromStable = stableCoins[quote]?.conversionRate;
-  if (typeof fromStable === "number" && isFinite(fromStable) && fromStable > 0) return fromStable;
+  if (typeof fromStable === "number" && isFinite(fromStable) && fromStable > 0)
+    return fromStable;
   const fromPrices = coinPrices[quote + "USDC"];
-  if (typeof fromPrices === "number" && isFinite(fromPrices) && fromPrices > 0) {
+  if (
+    typeof fromPrices === "number" &&
+    isFinite(fromPrices) &&
+    fromPrices > 0
+  ) {
     if (stableCoins[quote]) stableCoins[quote].conversionRate = fromPrices;
     return fromPrices;
   }
@@ -169,7 +191,9 @@ function getQuoteToUSDC(quote) {
 
 async function binanceTs() {
   if (typeof binanceTs._off !== "number") {
-    const t = await fetchJSON(`${WORKER_URL}/proxyPublic?endpoint=/api/v3/time`);
+    const t = await fetchJSON(
+      `${WORKER_URL}/proxyPublic?endpoint=/api/v3/time`
+    );
     binanceTs._off = (t.serverTime || 0) - Date.now();
   }
   return Date.now() + (binanceTs._off || 0);
@@ -179,7 +203,7 @@ function cloneOBJ(o) {
   return JSON.parse(JSON.stringify(o));
 }
 
-function fixNumber(n, fix, expand) {
+function fixNumber(n, fix, expand = false) {
   n = parseFloat(n);
   if (expand) {
     fix = Math.abs(n) >= expand.limit ? fix : fix + expand.val;
@@ -264,8 +288,10 @@ async function fetchJSON(url, opts) {
     try {
       const j = JSON.parse(text);
       const m = j.msg || j.message || text;
-      detail = (j.code !== undefined) ? `${j.code} ${m}` : m;
-    } catch { /* texte brut */ }
+      detail = j.code !== undefined ? `${j.code} ${m}` : m;
+    } catch {
+      /* texte brut */
+    }
     throw new Error(`HTTP ${r.status} – ${detail}`);
   }
   return text ? JSON.parse(text) : {};
@@ -333,7 +359,9 @@ async function connectUserWS(apiKey, handlers) {
 function connectPriceWS(assets, onPrice) {
   if (priceWs) priceWs.close();
 
-  const baseStreams = (assets || []).map((a) => `${a.toLowerCase()}usdc@ticker`);
+  const baseStreams = (assets || []).map(
+    (a) => `${a.toLowerCase()}usdc@ticker`
+  );
   const stableStreams = Object.keys(stableCoins)
     .filter((s) => s !== "USDC")
     .map((s) => `${s.toLowerCase()}usdc@ticker`);
@@ -394,7 +422,6 @@ async function getFiatHistoryFirstPage(apiKey, apiSecret, transactionType) {
     throw error;
   }
 }
-
 
 async function getFiatPaymentsFirstPage(apiKey, apiSecret, type) {
   const rows = 500;
@@ -502,7 +529,10 @@ async function getReservedFundsUSDC(apiKey, apiSecret) {
 
     let quote = null;
     for (const sc in stableCoins) {
-      if (o.symbol.endsWith(sc)) { quote = sc; break; }
+      if (o.symbol.endsWith(sc)) {
+        quote = sc;
+        break;
+      }
     }
     if (!quote) return sum;
 
@@ -510,7 +540,6 @@ async function getReservedFundsUSDC(apiKey, apiSecret) {
     return sum + remainingQty * price * quoteToUSDC;
   }, 0);
 }
-
 
 // ------------------------------------------------------
 // 5) ORIGINAL DATA-PROCESSING & DISPLAY
@@ -563,7 +592,7 @@ function computeAveragePrice(trades) {
   const rate = getQuoteToUSDC(quote) ?? 1; // conversion quote→USDC (courant)
 
   const QTY_EPS = 1e-12; // quantité négligeable
-  const DUST_USDC = 1;   // “quasi-zéro” en valeur USDC
+  const DUST_USDC = 1; // “quasi-zéro” en valeur USDC
 
   let positionQty = 0;
   let positionCostUSDC = 0;
@@ -576,20 +605,21 @@ function computeAveragePrice(trades) {
     if (t.isBuyer) {
       const avg = positionQty ? positionCostUSDC / positionQty : 0;
       if (positionQty <= QTY_EPS || positionQty * avg <= DUST_USDC) {
-        positionQty = 0; positionCostUSDC = 0;
+        positionQty = 0;
+        positionCostUSDC = 0;
       }
-      positionQty      += qty;
-      positionCostUSDC += qty * price * rate;  // en USDC
-
+      positionQty += qty;
+      positionCostUSDC += qty * price * rate; // en USDC
     } else {
       const avg = positionQty ? positionCostUSDC / positionQty : 0;
       const sellQty = Math.min(qty, positionQty);
-      positionQty      -= sellQty;
+      positionQty -= sellQty;
       positionCostUSDC -= sellQty * avg;
 
       const newAvg = positionQty ? positionCostUSDC / positionQty : 0;
       if (positionQty <= QTY_EPS || positionQty * newAvg <= DUST_USDC) {
-        positionQty = 0; positionCostUSDC = 0;
+        positionQty = 0;
+        positionCostUSDC = 0;
       }
     }
   }
@@ -731,9 +761,9 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
   $(".ongoingPnl_data").html(ongoing.html).css("color", ongoing.color);
 }
 
-function getCoin(coins, name){
-  return coins.filter(coin => coin.asset === name);
-};
+function getCoin(coins, name) {
+  return coins.filter((coin) => coin.asset === name);
+}
 
 function getCoinProportion(coin) {
   let total_value = 0;
@@ -913,7 +943,6 @@ function clearData(mode) {
 
   // Nettoie la liste (garde le bouton .detail_connect)
   $(".detail_elem_wrapper").children().not(".detail_connect").remove();
-  $(".detail_elem_wrapper").css("pointer-events", "all");
 
   if (kind === "error") {
     // ÉTAT ERREUR : bouton "FETCH RETRY" + métriques en ROUGE "ERROR"
@@ -923,8 +952,10 @@ function clearData(mode) {
     $(".global_elem.pnl .elem_data").text("ERROR");
 
     // Couleur rouge explicite pour tout ce qui affiche une valeur
-    $(".global_elem .elem_data, .pnl_data, .detail_subElem_data")
-      .css("color", "var(--red)");
+    $(".global_elem .elem_data, .pnl_data, .detail_subElem_data").css(
+      "color",
+      "var(--red)"
+    );
 
     bottomNotification("fetchError");
   } else {
@@ -938,8 +969,10 @@ function clearData(mode) {
       "0.00" + ' <span class="currency">$</span>'
     );
 
-    $(".global_elem .elem_data, .pnl_data, .detail_subElem_data")
-      .css("color", "var(--gray)");
+    $(".global_elem .elem_data, .pnl_data, .detail_subElem_data").css(
+      "color",
+      "var(--gray)"
+    );
 
     bottomNotification("disconnected");
   }
@@ -947,7 +980,6 @@ function clearData(mode) {
   // Ré-appliquer les listeners/états d’UI le cas échéant
   initDOMupdate(false);
 }
-
 
 // GRAPHIC UPDATE
 
@@ -976,6 +1008,7 @@ function fetchStyleUpdate(fetching, refresh = false) {
 
     $(".refresh_container").css("opacity", ".3");
   } else {
+    $(".detail_elem_wrapper, .minifier").css("pointer-events", "all");
     $(".refresh_container").css("opacity", "1");
     $(".skeleton").removeClass("skeleton");
   }
@@ -1319,7 +1352,7 @@ function backerMouseupHandler() {
 
 let allminified = false;
 
-function minifyTileHandler(elem, minify){
+function minifyTileHandler(elem, minify) {
   // let minified = $(elem).data("minified") ?? false;
   let name = $(elem).find(".detail_elem_name").text();
   let coin = getCoin(walletData.coins, name)[0] ?? false;
@@ -1334,7 +1367,388 @@ function minifyTileHandler(elem, minify){
 
   $(elem).data("minified", minify);
   // params_save(params);
-};
+}
+
+// TRADES
+
+const TRADE_STORE = { items: [], keyset: new Set() };
+const _tkey = (t) => `${t.symbol}#${t.id}`;
+
+function aggregateTrades(trades, { windowMs = 2000 } = {}) {
+  if (!Array.isArray(trades)) return [];
+  const norm = trades
+    .map((t) => ({
+      ...t,
+      _time: Number(t.time),
+      _qty: Number(t.qty),
+      _quoteQty: Number(t.quoteQty),
+      _price: Number(t.price),
+      _commission: Number(t.commission),
+      _side: t.isBuyer ? "BUY" : "SELL",
+    }))
+    .sort((a, b) => a._time - b._time);
+
+  const groups = [];
+  let cur = null;
+
+  for (const t of norm) {
+    const { base, quote } = splitSymbol(t.symbol);
+    const sameOrder = cur && cur.orderId === t.orderId;
+    const sameFlow =
+      cur &&
+      cur.symbol === t.symbol &&
+      cur.side === t._side &&
+      t._time - cur.lastTime <= windowMs;
+
+    if (!cur || !(sameOrder || sameFlow)) {
+      cur = {
+        symbol: t.symbol,
+        base,
+        quote,
+        side: t._side,
+        orderId: t.orderId,
+        firstTime: t._time,
+        lastTime: t._time,
+        parts: 0,
+        qty: 0,
+        quoteQty: 0,
+        priceAvg: 0, // en devise de cotation
+        fees: [], // [{asset, amount}]
+      };
+      groups.push(cur);
+    }
+
+    cur.parts += 1;
+    cur.qty += t._qty;
+    cur.quoteQty += t._quoteQty;
+    cur.lastTime = t._time;
+    if (cur.qty > 0) cur.priceAvg = cur.quoteQty / cur.qty;
+    if (t._commission)
+      cur.fees.push({ asset: t.commissionAsset, amount: t._commission });
+  }
+  return groups;
+}
+
+function convertToUSDC({ asset, amount, base, quote, priceAvg }) {
+  if (!amount) return 0;
+
+  // Stable direct (EUR, USDT, …) via conversionRate / ticker <stable>USDC
+  if (stableCoins[asset]) {
+    const r = getQuoteToUSDC(asset);
+    return r ? amount * r : 0;
+  }
+
+  // Si l'asset = BASE (ex: fee payée en BERA/ETH), passe par le prix moyen base→quote, puis quote→USDC
+  if (asset === base) {
+    const q2u = getQuoteToUSDC(quote) ?? 0;
+    return priceAvg && q2u ? amount * priceAvg * q2u : 0;
+  }
+
+  // Sinon tente un prix direct <asset>USDC
+  const px = coinPrices[asset + "USDC"];
+  if (px && isFinite(px) && px > 0) return amount * px;
+
+  return 0; // inconnu pour l’instant
+}
+
+function openPositionsSet() {
+  return new Set(
+    Object.entries(positions)
+      .filter(([_, p]) => (p?.qty || 0) > 1e-12)
+      .map(([asset]) => asset)
+  );
+}
+
+function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs = 2000, limit = 30 } = {}) {
+  const QTY_EPS = 1e-12;
+  const DUST_USDC = 1;
+
+  const isDust = (st) => st.qty <= QTY_EPS || st.cost <= DUST_USDC;
+
+  const groups = aggregateTrades(trades, { windowMs })
+    .sort((a, b) => a.firstTime - b.firstTime); // chronologique ↑
+
+  const ledger = new Map();
+
+  const rows = groups.map((g) => {
+    const q2u       = getQuoteToUSDC(g.quote) ?? 0;
+    const priceUSDC = g.priceAvg && q2u ? g.priceAvg * q2u : 0;
+    const amountUSD = priceUSDC ? g.qty * priceUSDC : 0;
+
+    const feeUSDC = g.fees.reduce((sum, f) =>
+      sum + convertToUSDC({
+        asset: f.asset, amount: f.amount,
+        base: g.base, quote: g.quote, priceAvg: g.priceAvg
+      }), 0
+    );
+
+    const st  = ledger.get(g.base) || { qty: 0, cost: 0 }; // cost en USDC
+    const avg = st.qty > QTY_EPS ? (st.cost / st.qty) : 0;
+
+    let realized = null;
+
+    if (g.side === "BUY") {
+      if (isDust(st)) { st.qty = 0; st.cost = 0; }
+      st.qty  += g.qty;
+      st.cost += amountUSD + feeUSDC;
+    } else {
+      const sellQty   = Math.min(g.qty, st.qty || 0);
+      const proceeds  = amountUSD;
+      const costSold  = sellQty * avg;
+      realized = (proceeds - feeUSDC) - costSold;
+
+      st.qty  = Math.max(0, st.qty - sellQty);
+      st.cost = Math.max(0, st.cost - costSold);
+
+      if (isDust(st)) { st.qty = 0; st.cost = 0; }
+    }
+
+    ledger.set(g.base, st);
+
+    return {
+      time: g.lastTime,
+      symbol: g.symbol,
+      base: g.base,
+      quote: g.quote,
+      side: g.side,                   // "BUY" | "SELL"
+      parts: g.parts,
+      amountToken: g.qty,
+      amountUSDC: amountUSD,
+      priceUSDC: priceUSDC,
+      feeUSDC: feeUSDC,
+      realizedPnlUSDC: g.side === "SELL" ? realized : null,
+      realizedPnlPct: (g.side === "SELL" && (amountUSD - feeUSDC) > 0)
+        ? (realized / (amountUSD - feeUSDC)) * 100
+        : null,
+    };
+  });
+
+  // Tri récent→ancien
+  let out = rows.sort((a, b) => b.time - a.time);
+
+  // Filtre: ALL | BUY | SELL
+  const f = (filter || "ALL").toUpperCase();
+  if (f === "BUY")  out = out.filter(r => r.side === "BUY");
+  if (f === "SELL") out = out.filter(r => r.side === "SELL");
+
+  // Filtre coin (par base). Accepte "ETH", "ETHUSDC", "ETH/USDC", etc.
+  const cf = (coinFilter || "ALL").toUpperCase().trim();
+  if (cf !== "ALL") {
+    let desiredBase = cf;
+    try { desiredBase = splitSymbol(cf).base.toUpperCase(); } catch {}
+    out = out.filter(r => r.base.toUpperCase() === desiredBase);
+  }
+
+  // Limite d'affichage
+  if (Number.isFinite(limit) && limit > 0) out = out.slice(0, limit);
+
+  return out;
+}
+
+function toUIRows(groups) {
+  return groups.map((g) => {
+    const quoteToUSDC = getQuoteToUSDC(g.quote) ?? 0;
+    const priceUSDC = g.priceAvg && quoteToUSDC ? g.priceAvg * quoteToUSDC : 0;
+    const amountUSDC = priceUSDC ? g.qty * priceUSDC : 0;
+
+    const feeUSDC = g.fees.reduce(
+      (sum, f) =>
+        sum +
+        convertToUSDC({
+          asset: f.asset,
+          amount: f.amount,
+          base: g.base,
+          quote: g.quote,
+          priceAvg: g.priceAvg,
+        }),
+      0
+    );
+
+    return {
+      time: g.lastTime, // on affiche le dernier fill
+      symbol: g.symbol,
+      base: g.base,
+      quote: g.quote,
+      side: g.side, // BUY / SELL
+      parts: g.parts, // nombre de fills agrégés
+      amountToken: g.qty, // quantité achetée/vendue
+      amountUSDC: amountUSDC, // valeur (USDC)
+      priceUSDC: priceUSDC, // prix moyen (USDC)
+      feeUSDC: feeUSDC, // frais (USDC)
+    };
+  });
+}
+
+function generateNpushTradeTile(data) {
+  function formatPnl(
+    item,
+    pnl,
+    symbol,
+    fix = 2
+  ) {
+    const sign = pnl >= 0 ? "+" : "-";
+    const pnlColor =
+      pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
+
+    $(item).text(sign + fixNumber(Math.abs(pnl), fix) + " " + symbol);
+    $(item).css("color", pnlColor);
+  }
+
+  const container = $(".tradeHistory_thirdLine");
+  let item = $(`
+    <div class="tradeHistory_item">
+      <div class="tradeHistory_item_header">
+          <div class="tradeHistory_item_headerFirstLine">
+              <div class="tradeHistory_item_headerFirstLine_leftPart">
+                  <span class="tradeHistory_item_currLabel">ETH</span>
+                  <span class="tradeHistory_item_currAmount">0.2552</span>
+              </div>
+              <span class="tradeHistory_item_date">2025-08-27 07:15:18</span>
+          </div>
+          <div class="tradeHistory_item_headerSecondLine">
+              <span class="tradeHistory_item_side">BUY</span>
+          </div>
+      </div>
+      <div class="tradeHistory_item_body">
+          <div class="tradeHistory_item_lineWrapper">
+              <span class="tradeHistory_item_lineLabel">PRICE</span>
+              <span class="tradeHistory_item_lineValue price_line">2.504 $</span>
+          </div>
+          <div class="tradeHistory_item_lineWrapper">
+              <span class="tradeHistory_item_lineLabel">AMOUNT</span>
+              <span class="tradeHistory_item_lineValue amount_value">250.4 $</span>
+          </div>
+          <div class="tradeHistory_item_lineWrapper">
+              <span class="tradeHistory_item_lineLabel">FEES</span>
+              <span class="tradeHistory_item_lineValue fees_line">0.250 $</span>
+          </div>
+          <div class="tradeHistory_item_lineWrapper">
+              <span class="tradeHistory_item_lineLabel">PNL</span>
+              <span class="tradeHistory_item_lineValue pnl_line">+350 $</span>
+          </div>
+      </div>
+    </div>
+  `);
+
+  $(item).find(".tradeHistory_item_currLabel").text(data.base);
+  $(item)
+    .find(".tradeHistory_item_currAmount")
+    .text(fixNumber(data.amountToken, 2));
+  $(item).find(".tradeHistory_item_date").text(formatTimestamp(data.time));
+
+  $(item)
+    .find(".price_line")
+    .text(fixNumber(data.priceUSDC, 2) + " $");
+  $(item)
+    .find(".amount_value")
+    .text(fixNumber(data.amountUSDC, 2) + " $");
+  $(item)
+    .find(".fees_line")
+    .text(fixNumber(data.feeUSDC, 2) + " $");
+
+  if (data.side == "BUY") {
+    $(item).find(".tradeHistory_item_side").text("BUY");
+    $(item).find(".tradeHistory_item_side").css("color", "var(--green)");
+    $(item).find(".pnl_line").parent().css("display", "none");
+  } else {
+    $(item).find(".tradeHistory_item_side").text("SELL");
+    $(item).find(".tradeHistory_item_side").css("color", "var(--red)");
+    if(params.isPercentage){
+      formatPnl($(item).find(".pnl_line"), data.realizedPnlPct, "%");
+    }else{
+      formatPnl($(item).find(".pnl_line"), data.realizedPnlUSDC, "$");
+    };
+  }
+
+  $(container).append(item);
+}
+
+function loadTradeData(trades, limit = 50) {
+  const rows = rowsWithRealized(trades, { 
+    filter: buyOrSell, 
+    coinFilter: tradeFocusedCoin,
+    limit: limit
+  });
+
+  $(".tradeHistory_thirdLine").children().remove();
+  for (const data of rows) {
+    generateNpushTradeTile(data);
+  }
+}
+
+function execReportToMyTrade(r) {
+  // Only actual fills
+  if (r.x !== "TRADE" || r.l === "0") return null;
+
+  const symbol = r.s;
+  const isBuyer = r.S === "BUY";
+  const isMaker = !!r.m;
+
+  // Last fill qty/price (with safe fallbacks)
+  const qty   = Number(r.l);
+  let  price  = Number(r.L);
+  if (!isFinite(price) || price === 0) {
+    // fallback from last-quote / last-qty (if present), else from cumulative
+    const y = Number(r.Y); // last quote transacted
+    if (isFinite(y) && qty) price = y / qty;
+    else {
+      const Z = Number(r.Z), z = Number(r.z);
+      if (isFinite(Z) && isFinite(z) && z) price = Z / z;
+    }
+  }
+
+  // quoteQty for the last fill
+  let quoteQty = Number(r.Y);
+  if (!isFinite(quoteQty) || quoteQty === 0) quoteQty = isFinite(price) ? price * qty : 0;
+
+  // Commission (may be absent on some statuses)
+  const commission = (r.n != null) ? String(r.n) : "0";
+  const commissionAsset = r.N || null;
+
+  return {
+    symbol,
+    id: Number(r.t),                 // trade id from exec report
+    orderId: Number(r.i),
+    orderListId: -1,
+    price: String(price),
+    qty: String(qty),
+    quoteQty: String(quoteQty),
+    commission,
+    commissionAsset,
+    time: Number(r.T),               // trade time (ms)
+    isBuyer,
+    isMaker,
+    isBestMatch: true,               // not provided; harmless for our use
+  };
+}
+
+function trades_appendBatch(batch) {
+  if (!Array.isArray(batch) || !batch.length) return;
+  for (const t of batch) {
+    const k = _tkey(t);
+    if (!TRADE_STORE.keyset.has(k)) {
+      TRADE_STORE.keyset.add(k);
+      TRADE_STORE.items.push(t);
+    }
+  }
+  TRADE_STORE.items.sort((a, b) => a.time - b.time);
+}
+
+async function trades_fetchAndInit(apiKey, apiSecret, symbols = []) {
+  const recvWindow = 60000;
+  for (const sym of symbols) {
+    const ts = await binanceTs();
+    let qs = `symbol=${sym}&timestamp=${ts}&recvWindow=${recvWindow}`;
+    const sig = await signHmacSha256(qs, apiSecret);
+    qs += `&signature=${sig}`;
+    const rows = await proxySigned(apiKey, "/api/v3/myTrades", qs);
+    trades_appendBatch(rows);
+  }
+}
+
+function trades_getAll() {
+  return [...TRADE_STORE.items];
+}
 
 // SIMULATOR
 
@@ -1564,27 +1978,39 @@ function meanBuyUpdate(price, quantity) {
 async function initRealTime(apiKey, apiSecret, onPrice) {
   const recvWindow = 60000;
 
-  // 1) snapshot balances (horloge alignée)
+  // 0) Prime conversions des stables -> USDC (EURUSDC, USDTUSDC, ...)
+  await primeStableConversions();
+
+  // 1) Snapshot compte (balances)
   const ts = await binanceTs();
   let qs0 = `timestamp=${ts}&recvWindow=${recvWindow}`;
   const sig0 = await signHmacSha256(qs0, apiSecret);
   qs0 += `&signature=${sig0}`;
+
   const snapshot = await proxySigned(apiKey, "/api/v3/account", qs0);
 
-  // 2) initialize quantities
+  // 2) Init positions à partir des balances
+  positions = positions || {};
+  Object.keys(positions).forEach(k => delete positions[k]); // reset propre
+
   snapshot.balances.forEach((b) => {
     const qty = parseFloat(b.free) + parseFloat(b.locked);
     if (qty > 0) positions[b.asset] = { qty, cost: 0 };
   });
 
-  await primeStableConversions();
-
-  // 3) backfill cost basis via myTrades (horloge + recvWindow)
+  // 3) Backfill coût moyen (depuis dernier quasi-zéro) + Trade Store bootstrap
+  //    - coût moyen: on s'arrête au premier symbole qui renvoie des trades
+  //    - trade store: on agrège TOUTES les paires <asset><stable> trouvées
   await Promise.all(
     Object.keys(positions).map(async (asset) => {
       if (stableCoins[asset]) return;
-      for (const stable in stableCoins) {
-        const sym = asset + stable;
+
+      let costSet = false;
+
+      // boucle sur toutes les stables connues (USDC, USDT, EUR, ...)
+      for (const quote of Object.keys(stableCoins)) {
+        const sym = asset + quote;
+
         try {
           const ts2 = await binanceTs();
           let qs2 = `symbol=${sym}&timestamp=${ts2}&recvWindow=${recvWindow}`;
@@ -1592,22 +2018,35 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
           qs2 += `&signature=${sig2}`;
 
           const trades = await proxySigned(apiKey, "/api/v3/myTrades", qs2);
-          const avg = computeAveragePrice(trades);
-          if (avg !== null) positions[asset].cost = avg;
-          break;
-        } catch (_) {}
+
+          // 3a) Alimente le trade store (toutes les paires)
+          if (Array.isArray(trades) && trades.length) {
+            trades_appendBatch(trades);
+          }
+
+          // 3b) Premier symbole qui a des trades -> calcule le coût moyen
+          if (!costSet && Array.isArray(trades) && trades.length) {
+            const avg = computeAveragePrice(trades);
+            if (avg !== null) {
+              positions[asset].cost = avg; // en USDC (computeAveragePrice gère la conversion)
+              costSet = true;
+            }
+          }
+        } catch (_) {
+          // ignorer les symboles inexistants / sans droit / sans trades
+        }
       }
     })
   );
 
-  // 4) initial draw
+  // 4) Premier rendu des données calculées
   recomputePortfolio();
 
-  // 5) start real-time streams
+  // 5) Flux temps réel (prix publics + user data)
   connectPriceWS(Object.keys(positions), onPrice);
   connectUserWS(apiKey, {
     onBalances: handleAccountPosition,
-    onOrderUpdate: handleOrderUpdate,
+    onOrderUpdate: handleOrderUpdate,   // <- notre handler ci-dessous
     onBalanceUpdate: handleBalanceUpdate,
   });
 }
@@ -1647,31 +2086,56 @@ function handleBalanceUpdate(upd) {
 }
 
 function handleOrderUpdate(r) {
+  // 0) Si c'est un "fill" (executionReport de type TRADE), on ajoute au Trade Store
+  if (r && r.x === "TRADE" && r.l !== "0") {
+    trades_appendFromExecReport(r);
+  }
+
+  // 1) Parsing symbole & side
   const { base: asset, quote } = splitSymbol(r.s);
-  if (stableCoins.hasOwnProperty(asset)) return; // ignore si l’asset EST un stable
+  if (stableCoins.hasOwnProperty(asset)) return; // on ignore si l'asset EST un stable
 
   const qty = parseFloat(r.l);
   let price = parseFloat(r.L);
   if (!isFinite(price) || !price) {
-    const Z = parseFloat(r.Z), z = parseFloat(r.z);
-    if (isFinite(Z) && isFinite(z) && z) price = Z / z; // fallback market
+    // fallback marchés : dernière quote (Y) / dernière qty (l) sinon cumul (Z/z)
+    const Y = parseFloat(r.Y);
+    if (isFinite(Y) && isFinite(qty) && qty > 0) {
+      price = Y / qty;
+    } else {
+      const Z = parseFloat(r.Z), z = parseFloat(r.z);
+      if (isFinite(Z) && isFinite(z) && z > 0) price = Z / z;
+    }
   }
-  if (!isFinite(qty) || !isFinite(price) || !qty) return;
+  if (!isFinite(qty) || !isFinite(price) || qty <= 0) return;
 
-  const rate = getQuoteToUSDC(quote) ?? 1; // quote→USDC
+  // 2) Conversion quote -> USDC pour maintenir un coût moyen en USDC
+  const rate = getQuoteToUSDC(quote) ?? 0;
+  if (!(rate > 0)) return; // pas de conversion disponible, on attendra le prochain tick
 
   const pos = (positions[asset] = positions[asset] || { qty: 0, cost: 0 });
   const QTY_EPS = 1e-12, DUST_USDC = 1;
 
   if (r.S === "BUY") {
-    if (pos.qty <= QTY_EPS || pos.qty * pos.cost <= DUST_USDC) { pos.qty = 0; pos.cost = 0; }
+    // Si quasi-flat -> reset des compteurs
+    if (pos.qty <= QTY_EPS || pos.qty * pos.cost <= DUST_USDC) {
+      pos.qty = 0; pos.cost = 0;
+    }
+    // moyenne pondérée (coût en USDC)
     pos.cost = (pos.cost * pos.qty + price * rate * qty) / (pos.qty + qty);
     pos.qty += qty;
+
   } else {
+    // SELL
     pos.qty = Math.max(0, pos.qty - qty);
-    if (pos.qty <= QTY_EPS || pos.qty * pos.cost <= DUST_USDC) { pos.qty = 0; pos.cost = 0; }
+
+    // Si retour à ~zéro -> reset
+    if (pos.qty <= QTY_EPS || pos.qty * pos.cost <= DUST_USDC) {
+      pos.qty = 0; pos.cost = 0;
+    }
   }
 
+  // 3) Recalcule/affiche (sauvegarde continue gérée dans recomputePortfolio)
   recomputePortfolio();
 }
 
@@ -1694,8 +2158,8 @@ function clearMinify(coins) {
 
 function recomputePortfolio() {
   let coins = [],
-      bank = 0,
-      pnlSum = 0;
+    bank = 0,
+    pnlSum = 0;
 
   // 1) Construire le snapshot (en USDC)
   Object.entries(positions).forEach(([asset, pos]) => {
@@ -1705,17 +2169,16 @@ function recomputePortfolio() {
     if (stableCoins.hasOwnProperty(asset)) {
       // ⚠️ plus de fallback "1" : si conversion inconnue => 0 (on n'affiche pas encore)
       const conversionRate =
-        stableCoins[asset].conversionRate ||
-        coinPrices[asset + "USDC"] || 0;
+        stableCoins[asset].conversionRate || coinPrices[asset + "USDC"] || 0;
 
       const curVal = pos.qty * conversionRate;
 
       coins.push({
         asset,
         amount: pos.qty,
-        price: conversionRate,   // conversion -> USDC
+        price: conversionRate, // conversion -> USDC
         actual_value: curVal,
-        buy_value: curVal,       // pas de PnL sur stables
+        buy_value: curVal, // pas de PnL sur stables
         mean_buy: conversionRate,
         ongoing_pnl: "+0",
         quoteCurrency: "USDC",
@@ -1724,7 +2187,7 @@ function recomputePortfolio() {
       bank += curVal;
     } else {
       const price = coinPrices[asset + "USDC"] || 0; // 0 si pas encore coté
-      const buyVal = pos.qty * pos.cost;             // coût moyen déjà en USDC
+      const buyVal = pos.qty * pos.cost; // coût moyen déjà en USDC
       const curVal = pos.qty * price;
       const pnl = curVal - buyVal;
 
@@ -1755,7 +2218,8 @@ function recomputePortfolio() {
     if (stableCoins.hasOwnProperty(c.asset)) {
       const r =
         stableCoins[c.asset].conversionRate ||
-        coinPrices[c.asset + "USDC"] || 0;
+        coinPrices[c.asset + "USDC"] ||
+        0;
       return Number.isFinite(r) && r > 0;
     }
     return Number.isFinite(c.price) && c.price > 0;
@@ -1763,7 +2227,9 @@ function recomputePortfolio() {
 
   // Persistance (seulement quand tout est validé)
   if (allValidNow) {
-    try { old_save(walletData); } catch {}
+    try {
+      old_save(walletData);
+    } catch {}
 
     // 3) Premier affichage "complet" : peindre puis retirer les skeletons
     if (firstLog) {
@@ -1800,10 +2266,9 @@ function recomputePortfolio() {
           displayNewData(walletData);
 
           isApop(walletData, oldWalletData);
-          $(".detail_elem_wrapper, .minifier").css("pointer-events", "all");
 
-          fetchStyleUpdate(false);
           removeDummy();
+          fetchStyleUpdate(false);
 
           fullyLoaded = true; // garde l’état
         }
@@ -1829,6 +2294,7 @@ async function getDataAndDisplay(refresh = false) {
     displayNewData(walletData);
     return;
   }
+
   fetchStyleUpdate(true, false);
 
   try {
@@ -1836,10 +2302,10 @@ async function getDataAndDisplay(refresh = false) {
       coinPrices[asset] = price;
       recomputePortfolio();
     });
+
     bottomNotification("connected");
   } catch (e) {
     console.error("Proxy/Init error:", e);
-    // Stop loading + UI état ERREUR explicite
     clearData("error");
   }
 }
@@ -1851,7 +2317,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.2</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.3</span>'
     )
   );
 
@@ -1906,7 +2372,6 @@ async function pnl() {
 
   $(".connect_disconnect").on("click", function () {
     if (isLogged) {
-      clearData();
       disconnect();
       closeBlurPage();
     } else {
@@ -1924,19 +2389,17 @@ async function pnl() {
           $(".all_pnl_data, .available_data").addClass("skeleton");
           firstLog = true;
         }
-  
+
         await initRealTime(API.API, API.SECRET, (asset, price) => {
           coinPrices[asset] = price;
           recomputePortfolio();
         });
       } catch (e) {
         bottomNotification("fetchError");
-        clearData(false);
+        clearData("error");
       }
     }
   });
-
-
 
   // FILTERS & FETCHING
 
@@ -1963,7 +2426,7 @@ async function pnl() {
         }
       }
 
-      focusedCoin = focusedCoin
+      focusedCoin = focusedCoin && focusedCoin !== "ALL"
         ? focusedCoin
         : walletData.coins.find(
             (coin) => !stableCoins.hasOwnProperty(coin.asset)
@@ -2084,6 +2547,37 @@ async function pnl() {
     simulatorStyleUpdate
   );
 
+  // TRADE
+
+  $(".tradeHistory").on("click", function () {
+    if ((isLogged && fullyLoaded)) {
+      $("#historyCoin").children().remove();
+
+      const coinOptionsNoStables = ["ALL", ...[...new Set(trades_getAll().map(t => (t.symbol||t.s)||"").filter(Boolean).map(sym => splitSymbol(sym).base).filter(b => b && !stableCoins[b]).map(b => b.toUpperCase()))].sort()];
+      for (const coin of coinOptionsNoStables) {
+          $("#historyCoin").append(
+            $('<option value="' + coin + '">' + coin + "</option>")
+          );
+      };
+
+      tradeFocusedCoin = tradeFocusedCoin ? tradeFocusedCoin : "ALL";
+      $("#historyCoin").val(tradeFocusedCoin);
+
+      loadTradeData(trades_getAll());
+      showBlurPage("tradeHistory_wrapper");
+    }
+  });
+
+  $("#historyCoin").on("change", function () {
+    tradeFocusedCoin = $(this).val();
+    loadTradeData(trades_getAll());
+  });
+
+  $("#buyOrSell").on("change", function () {
+    buyOrSell = $(this).val();
+    loadTradeData(trades_getAll());
+  });
+
   // UTILITY
 
   if (isMobile && false) {
@@ -2131,14 +2625,14 @@ async function pnl() {
     this.setSelectionRange(0, this.value.length);
   });
 
-  $('.minifier').on('click', function(){
-    $(this).text(!allminified ? '<>' : '-');
-    $(this).css('fontSize', !allminified ? '14px' : '18px');
+  $(".minifier").on("click", function () {
+    $(this).text(!allminified ? "<>" : "-");
+    $(this).css("fontSize", !allminified ? "14px" : "18px");
 
-    $('.detail_elem').each((_, elem) => {
+    $(".detail_elem").each((_, elem) => {
       minifyTileHandler(elem, !allminified);
     });
-    
+
     allminified = !allminified;
   });
 
@@ -2151,6 +2645,7 @@ async function pnl() {
   $("img").attr("draggable", false);
 
   $(".parameter_percentage").on("click", function () {
+    if(!isfullyLoaded) return;
     if (params.isPercentage) {
       $(this).css("backgroundColor", "var(--light-color)");
     } else {
@@ -2210,7 +2705,7 @@ async function pnl() {
     }
   });
 
-  $(document).on("click", ".detail_elem", function(){
+  $(document).on("click", ".detail_elem", function () {
     let minified = $(this).data("minified") ?? false;
     minifyTileHandler(this, !minified);
   });
@@ -2225,7 +2720,7 @@ async function pnl() {
     $("#api_key-val").val(API.API);
     $("#api_secret-val").val(API.SECRET);
 
-    $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
+    // $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
 
     getDataAndDisplay(false);
   } else {
