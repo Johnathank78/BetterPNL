@@ -47,6 +47,7 @@ var isLogged = false,
   fullyLoaded = false;
 var initialDeposit = 0,
   availableFunds = 0;
+var userWsKeepAliveId = null;
 
 var positions = {};
 
@@ -326,7 +327,10 @@ async function keepAliveKey(apiKey, lk) {
 }
 
 async function connectUserWS(apiKey, handlers) {
-  if (userWs) userWs.close();
+  // Nettoie l'ancien intervalle (au cas où) et ferme l'ancien WS
+  if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
+  if (userWs) { try { userWs.close(); } catch (_) {} }
+
   const lk = await createListenKey(apiKey);
 
   try {
@@ -334,6 +338,9 @@ async function connectUserWS(apiKey, handlers) {
   } catch (error) {
     throw error;
   }
+
+  // (Re)démarre le keep-alive lié à ce listenKey
+  userWsKeepAliveId = setInterval(() => keepAliveKey(apiKey, lk), 30 * 60 * 1000);
 
   userWs.onmessage = (e) => {
     const msg = JSON.parse(e.data);
@@ -351,9 +358,16 @@ async function connectUserWS(apiKey, handlers) {
         console.debug(msg);
     }
   };
-  userWs.onerror = console.error;
-  userWs.onclose = () => console.warn("User WS closed");
-  setInterval(() => keepAliveKey(apiKey, lk), 30 * 60 * 1000);
+
+  userWs.onerror = (err) => {
+    console.error(err);
+    if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
+  };
+
+  userWs.onclose = () => {
+    console.warn("User WS closed");
+    if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
+  };
 }
 
 function connectPriceWS(assets, onPrice) {
@@ -1459,7 +1473,7 @@ function openPositionsSet() {
   );
 }
 
-function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs = 2000, limit = 30 } = {}) {
+function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs = 2000 } = {}) {
   const QTY_EPS = 1e-12;
   const DUST_USDC = 1;
 
@@ -1539,9 +1553,6 @@ function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs
     out = out.filter(r => r.base.toUpperCase() === desiredBase);
   }
 
-  // Limite d'affichage
-  if (Number.isFinite(limit) && limit > 0) out = out.slice(0, limit);
-
   return out;
 }
 
@@ -1579,21 +1590,21 @@ function toUIRows(groups) {
   });
 }
 
+function formatPnl(
+  item,
+  pnl,
+  symbol,
+  fix = 2
+) {
+  const sign = pnl >= 0 ? "+" : "-";
+  const pnlColor =
+    pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
+
+  $(item).text(sign + fixNumber(Math.abs(pnl), fix) + " " + symbol);
+  $(item).css("color", pnlColor);
+}
+
 function generateNpushTradeTile(data) {
-  function formatPnl(
-    item,
-    pnl,
-    symbol,
-    fix = 2
-  ) {
-    const sign = pnl >= 0 ? "+" : "-";
-    const pnlColor =
-      pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
-
-    $(item).text(sign + fixNumber(Math.abs(pnl), fix) + " " + symbol);
-    $(item).css("color", pnlColor);
-  }
-
   const container = $(".tradeHistory_thirdLine");
   let item = $(`
     <div class="tradeHistory_item">
@@ -1664,16 +1675,37 @@ function generateNpushTradeTile(data) {
 }
 
 function loadTradeData(trades, limit = 50) {
-  const rows = rowsWithRealized(trades, { 
+  const rowsFull = rowsWithRealized(trades, { 
     filter: buyOrSell, 
     coinFilter: tradeFocusedCoin,
-    limit: limit
+    windowMs: 2000,
+    limit: null
   });
+
+  const rows = rowsFull.slice(0, limit);
+
+  let totalPnl = null;
+  if (params.isPercentage) {
+    const sells = rowsFull.filter(r => r.side === "SELL" && Number.isFinite(Number(r.realizedPnlPct)));
+    const totalPct = sells.length ? sells.reduce((s, r) => s + Number(r.realizedPnlPct), 0) / sells.length : 0;
+    formatPnl($(".tradeHistory_pnl"), totalPct, "%", 2);
+  }else{
+    totalPnl = rowsFull.reduce((sum, r) => sum + (r.realizedPnlUSDC || 0), 0);
+    formatPnl($(".tradeHistory_pnl"), totalPnl, "$", 2);
+  };
+
+  $('.tradeHistory_nbTrades').text(rowsFull.length);
 
   $(".tradeHistory_thirdLine").children().remove();
   for (const data of rows) {
     generateNpushTradeTile(data);
   }
+}
+
+function trades_appendFromExecReport(r){
+  const t = execReportToMyTrade(r);
+  if (!t) return;
+  trades_appendBatch([t]);
 }
 
 function execReportToMyTrade(r) {
@@ -2059,9 +2091,6 @@ function handleAccountPosition(balances) {
   balances.forEach((b) => {
     const asset = b.a || b.asset;
     const qty = parseFloat(b.f ?? b.free) + parseFloat(b.l ?? b.locked);
-
-    // Exclude stablecoin pairs
-    if (asset.endsWith("USDC")) return;
 
     if (qty > 0) {
       positions[asset] = positions[asset] || { qty: 0, cost: 0 };
@@ -2645,7 +2674,7 @@ async function pnl() {
   $("img").attr("draggable", false);
 
   $(".parameter_percentage").on("click", function () {
-    if(!isfullyLoaded) return;
+    if(!fullyLoaded) return;
     if (params.isPercentage) {
       $(this).css("backgroundColor", "var(--light-color)");
     } else {
