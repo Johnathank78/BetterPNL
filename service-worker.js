@@ -1,12 +1,12 @@
 const CACHE_NAME = "app-cache-v6.3";
 
-self.addEventListener("install", event => {
+self.addEventListener("install", (event) => {
+    self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => {
             const urlsToCache = [
                 "BetterPNL/index.html",
                 "BetterPNL/resources/css/pnl.css",
-                "BetterPNL/resources/fonts/fonts/GothicA1-Bold.woff",
                 "BetterPNL/resources/imgs/profile.png",
                 "BetterPNL/resources/imgs/pnl_logo.png",
                 "BetterPNL/resources/imgs/smallSS.png",
@@ -75,16 +75,12 @@ self.addEventListener("install", event => {
     );
 });
 
-self.addEventListener("activate", event => {
-    event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.filter(name => name !== CACHE_NAME).map(name => {
-                    return caches.delete(name); // Delete old caches
-                })
-            );
-        })
-    );
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.filter(n => n !== CACHE_NAME).map(caches.delete));
+    await self.clients.claim(); // 👉 contrôle immédiat des pages
+  })());
 });
 
 self.addEventListener("fetch", event => {
