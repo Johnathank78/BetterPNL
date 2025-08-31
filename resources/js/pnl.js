@@ -212,6 +212,7 @@ function fixNumber(n, fix, expand = false) {
   let f = n.toFixed(fix);
   return Math.abs(Math.floor(f)) == Math.abs(Math.ceil(f)) ? n.toFixed(2) : f;
 }
+
 function fixNumberBis(n, fix) {
   n = parseFloat(n);
   if (isNaN(n)) return "NaN";
@@ -223,6 +224,143 @@ function fixNumberBis(n, fix) {
     r += "0".repeat(dec - rd.length);
   }
   return n < 0 ? "-" + r : r;
+}
+
+function fixNumberTEST(input, opts = {}) {
+  let x = Number(input);
+  if (!isFinite(x)) return String(x); // NaN, Infinity…
+
+  const {
+    digits = 6,
+    short = false,
+    pad = false,
+    minDecimals = 0,
+    maxDecimals = 12,
+    rounding = "round",
+    decimalSeparator = ".",
+    showSign = false,
+    scales = "finance",
+    unit = "",
+    scientificBelow = 0, // ex: 1e-9 pour afficher "1.23e-10"
+  } = opts;
+
+  const sign = x < 0 ? "-" : (showSign && x > 0 ? "+" : "");
+  let abs = Math.abs(x);
+
+  // Zéro: géré à part pour éviter log10(0)
+  if (abs === 0) {
+    // si pad: on force exactement digits significatifs → "0" + (digits-1) zéros
+    // sinon: on respecte minDecimals / maxDecimals
+    const decIfPad = Math.max(0, Math.min(maxDecimals, Math.max(minDecimals, digits - 1)));
+    const dec = pad ? decIfPad : Math.max(minDecimals, 0);
+    let s = "0";
+    if (dec > 0) s += "." + "0".repeat(dec);
+    if (decimalSeparator !== ".") s = s.replace(".", decimalSeparator);
+    return sign + s + unit;
+  }
+
+  // Choix des suffixes
+  let SCALE_TABLE;
+  if (Array.isArray(scales)) {
+    SCALE_TABLE = scales;
+  } else if (scales === "metric") {
+    SCALE_TABLE = [[1e24,'Y'],[1e21,'Z'],[1e18,'E'],[1e15,'P'],[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k']];
+  } else { // "finance" (par défaut)
+    SCALE_TABLE = [[1e15,'P'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']];
+  }
+
+  // Utilitaires d’arrondi
+  const roundTo = (val, dec) => {
+    const f = Math.pow(10, dec);
+    switch (rounding) {
+      case "floor": return Math.floor(val * f) / f;
+      case "ceil":  return Math.ceil(val * f) / f;
+      case "trunc": return Math.trunc(val * f) / f;
+      default:      return Math.round(val * f) / f; // "round"
+    }
+  };
+
+  const intDigits = (v) => (v >= 1 ? Math.floor(Math.log10(v)) + 1 : 1);
+  const leadingZerosAfterDecimal = (v) => {
+    // v in (0,1). Exemple v=0.00045 → log10(v) ≈ -3.346 → floor = -4 → z = -(-4) - 1 = 3
+    const e = Math.floor(Math.log10(v));
+    return -e - 1;
+  };
+
+  // 1) Éventuellement choisir une échelle/suffixe pour faire tenir 'digits'
+  let scale = 1, suffix = "";
+  if (short) {
+    // On cherche le PLUS GRAND suffixe tel que le nombre d’entiers de (abs/scale) <= digits
+    for (const [v, s] of SCALE_TABLE) {
+      if (abs >= v) {
+        const scaled = abs / v;
+        const id = intDigits(scaled);
+        if (id <= digits && scaled >= 1) {
+          scale = v; suffix = s; break;
+        }
+      }
+    }
+    // À défaut: prendre la plus grande échelle applicable (même si id > digits)
+    if (scale === 1) {
+      for (const [v, s] of SCALE_TABLE) {
+        if (abs >= v) { scale = v; suffix = s; break; }
+      }
+    }
+  }
+
+  let val = abs / scale;
+
+  // 2) Calcul du nombre de décimales pour atteindre 'digits' significatifs
+  // Cas A: val >= 1 → décimales = digits - chiffres entiers
+  // Cas B: val  < 1 → il faut compter les zéros "avant" la 1ère décimale non-nulle
+  let dec;
+  if (val >= 1) {
+    const id = intDigits(val);
+    dec = Math.max(0, digits - id);
+  } else {
+    const zeros = leadingZerosAfterDecimal(val);
+    // ex: digits=4 et val=0.00045 → décimales = zeros + (digits - 1) = 3 + 3 = 6 → "0.000450"
+    dec = zeros + Math.max(0, digits - 1);
+  }
+
+  // Bornes min/max décimales
+  dec = Math.max(minDecimals, Math.min(maxDecimals, dec));
+
+  // 3) Arrondi
+  let rounded = roundTo(val, dec);
+
+  // Arrondi qui fait "déborder" un chiffre (ex: 9.999 → 10.000) : on réajuste
+  if (rounded >= 1 && intDigits(rounded) > intDigits(val) && dec > 0) {
+    const newId = intDigits(rounded);
+    const targetDec = Math.max(minDecimals, Math.min(maxDecimals, Math.max(0, digits - newId)));
+    if (targetDec !== dec) {
+      dec = targetDec;
+      rounded = roundTo(val, dec);
+    }
+  }
+
+  // 4) Si sans abréviation on n’arrive toujours pas à respecter 'digits' (val très grande) :
+  //    fallback: scientifique si demandé.
+  if (!short && intDigits(rounded) > digits && scientificBelow > 0 && abs < scientificBelow) {
+    // notation scientifique avec digits significatifs
+    let sci = abs.toExponential(Math.max(0, digits - 1));
+    if (decimalSeparator !== ".") sci = sci.replace(".", decimalSeparator);
+    return sign + sci + unit;
+  }
+  // 5) Chaîne décimale de base en "." (on convertira le séparateur ensuite)
+  let base = dec > 0 ? rounded.toFixed(dec) : String(Math.round(rounded));
+
+  // 6) Si pad = false → on nettoie les zéros finaux mais on respecte minDecimals
+  if (!pad && dec > 0) {
+    const [ip, dp = ""] = base.split(".");
+    let dpTrim = dp.replace(/0+$/, "");
+    if (dpTrim.length < minDecimals) dpTrim = dp.slice(0, Math.min(dp.length, minDecimals));
+    base = dpTrim.length ? ip + "." + dpTrim : ip;
+  }
+
+  // 7) Appliquer séparateur décimal et composer le résultat final
+  if (decimalSeparator !== ".") base = base.replace(".", decimalSeparator);
+  return sign + base + suffix + unit;
 }
 
 function isNacN(input) {
@@ -792,138 +930,90 @@ function getCoinProportion(coin) {
 }
 
 function generateAndPushTile(coin) {
-  // Convert the PnL to a number
-  const pnlNumber = parseFloat(coin.ongoing_pnl);
+  // ── Calculs PnL / couleurs
+  const pnl = Number(coin.ongoing_pnl) || 0;
+  const isPct = !!params.isPercentage;
+  const symbol = isPct ? "%" : "$";
+  const sign = pnl >= 0 ? "+" : "-";
+  const pnlAbs = Math.abs(pnl);
+  const formattedPnl = isPct
+    ? fixNumberTEST((pnlAbs / Number(coin.buy_value || 1)) * 100, { digits: 5, maxDecimals: 2, pad: true })
+    : fixNumberTEST(pnlAbs, { digits: 5, maxDecimals: 2, pad: true });
 
-  // Determine the sign and color based on the PnL value
-  const sign = pnlNumber >= 0 ? "+" : "-";
-  const symbol = params.isPercentage ? "%" : "$";
-  const formattedPnl = params.isPercentage
-    ? fixNumber(Math.abs(pnlNumber / coin.buy_value) * 100, 2)
-    : fixNumber(Math.abs(pnlNumber), 2);
-  const pnlColor =
-    pnlNumber > 0
-      ? "var(--green)"
-      : pnlNumber < 0
-      ? "var(--red)"
-      : "var(--gray)";
-
-  const short = stableCoins[coin.quoteCurrency].short;
-
+  const pnlColor = pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
+  const currency = (stableCoins[coin.quoteCurrency] && stableCoins[coin.quoteCurrency].short) || coin.quoteCurrency || "";
   const prop = getCoinProportion(coin);
-  let isskeleton = fullyLoaded ? "" : "skeleton";
+  const skeleton = fullyLoaded ? "" : "skeleton";
 
-  // Build the HTML using a template literal
-
-  var tileHtml = false;
-  let focusedTile = $(".detail_elem_wrapper")
+  // ── Sélecteurs utiles
+  const $wrapper = $(".detail_elem_wrapper");
+  let $tile = $wrapper
     .find(".detail_elem")
-    .filter((_, el) => $(el).find(".detail_elem_name").text() == coin.asset);
-  let minified = false;
+    .filter((_, el) => $(el).find(".detail_elem_name").text() === coin.asset)
+    .eq(0);
 
-  if (focusedTile.length == 1) {
-    tileHtml = focusedTile.eq(0);
-    minified = $(tileHtml).data("minified");
+  const exists = $tile.length === 1;
 
-    $(tileHtml).find(".detail_elem_name").text(coin.asset);
-    $(tileHtml)
-      .find(".detail_elem_amount")
-      .text(
-        !minified
-          ? fixNumberBis(coin.amount, 10) + " | " + prop + "%"
-          : prop + "% | "
-      );
-
-    $(tileHtml)
-      .find(".detail_elem_price")
-      .text(fixNumber(coin.price, 2, { limit: 10, val: 2 }) + " " + short);
-
-    $(tileHtml)
-      .find(".actual_value")
-      .text(fixNumber(coin.actual_value, 2) + " " + "$");
-    $(tileHtml)
-      .find(".mean_buy")
-      .text(fixNumber(coin.mean_buy, 2, { limit: 10, val: 2 }) + " " + short);
-    $(tileHtml)
-      .find(".buy_value")
-      .text(fixNumber(coin.buy_value, 2) + " " + "$");
-
-    $(tileHtml)
-      .find(".pnl_data")
-      .text(sign + formattedPnl + " " + symbol);
-    $(tileHtml).find(".pnl_data").css("color", pnlColor);
-
-    $(tileHtml)
-      .find(".detail_elem_header")
-      .find(".pnl_data")
-      .css("display", minified ? "inline-block" : "none");
-  } else {
-    tileHtml = $(
-      `
-      <div class="detail_elem ` +
-        isskeleton +
-        `">
-          <div class="detail_elem_header">
-              <span class="detail_elem_title">
-                  <span class="detail_elem_name"></span>
-                  <span class="detail_elem_amount"></span>
-                  <span class="pnl_data"></span>
-              </span>
-              <span class="detail_elem_price"></span>
+  // ── Si non existante, on crée la tuile (HTML minimal & propre)
+  if (!exists) {
+    $tile = $(`
+      <div class="detail_elem ${skeleton}">
+        <div class="detail_elem_header">
+          <span class="detail_elem_title">
+            <span class="detail_elem_name"></span>
+            <span class="detail_elem_amount"></span>
+            <span class="pnl_data"></span>
+          </span>
+          <span class="detail_elem_price"></span>
+        </div>
+        <div class="detail_elem_body">
+          <div class="detail_subElem">
+            <span class="detail_subElem_title">ACTUAL VALUE</span>
+            <span class="detail_subElem_data actual_value"></span>
           </div>
-          <div class="detail_elem_body">
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">ACTUAL VALUE</span>
-                  <span class="detail_subElem_data actual_value"></span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">MEAN BUY</span>
-                  <span class="detail_subElem_data mean_buy"></span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">BUY VALUE</span>
-                  <span class="detail_subElem_data buy_value"></span>
-              </div>
-              <div class="detail_subElem">
-                  <span class="detail_subElem_title">ONGOING PNL</span>
-                  <span class="detail_subElem_data pnl_data"></span>
-              </div>
+          <div class="detail_subElem">
+            <span class="detail_subElem_title">MEAN BUY</span>
+            <span class="detail_subElem_data mean_buy"></span>
           </div>
+          <div class="detail_subElem">
+            <span class="detail_subElem_title">BUY VALUE</span>
+            <span class="detail_subElem_data buy_value"></span>
+          </div>
+          <div class="detail_subElem">
+            <span class="detail_subElem_title">ONGOING PNL</span>
+            <span class="detail_subElem_data pnl_data"></span>
+          </div>
+        </div>
       </div>
-      `
-    );
-
-    $(tileHtml).data("minified", false);
-    // $(tileHtml).data("minified", params.minified[coin.asset]);
-    // minifyTile(tileHtml, params.minified[coin.asset] ?? false, false);
-
-    $(tileHtml).find(".detail_elem_name").text(coin.asset);
-    $(tileHtml)
-      .find(".detail_elem_amount")
-      .text(fixNumberBis(coin.amount, 10) + " | " + prop + "%");
-    $(tileHtml)
-      .find(".detail_elem_price")
-      .text(fixNumber(coin.price, 2, { limit: 10, val: 2 }) + " " + short);
-
-    $(tileHtml)
-      .find(".actual_value")
-      .text(fixNumber(coin.actual_value, 2) + " " + "$");
-    $(tileHtml)
-      .find(".mean_buy")
-      .text(fixNumber(coin.mean_buy, 2, { limit: 10, val: 2 }) + " " + short);
-    $(tileHtml)
-      .find(".buy_value")
-      .text(fixNumber(coin.buy_value, 2) + " " + "$");
-
-    $(tileHtml)
-      .find(".pnl_data")
-      .text(sign + formattedPnl + " " + symbol);
-    $(tileHtml).find(".pnl_data").css("color", pnlColor);
+    `);
+    $tile.data("minified", false);
+    $wrapper.append($tile);
   }
 
-  if (!focusedTile.length == 1) {
-    $(".detail_elem_wrapper").append(tileHtml);
-  }
+  // ── Helpers format
+  const fmtPrice = v => fixNumberTEST(v, { digits: 5, pad: true, short: true });
+  const fmt      = v => fixNumberTEST(v, { digits: 5, pad: true });
+
+  // ── Mise à jour des champs (unique code path)
+  const minified = !!$tile.data("minified");
+
+  $tile.find(".detail_elem_name").text(coin.asset);
+  $tile.find(".detail_elem_amount").text(
+    !minified ? `${fixNumberBis(coin.amount, 10)} | ${prop}%` : `${prop}% | `
+  );
+
+  $tile.find(".detail_elem_price").text(`${fmtPrice(coin.price)} ${currency}`);
+  $tile.find(".actual_value").text(`${fmt(coin.actual_value)} ${currency}`);
+  $tile.find(".mean_buy").text(`${fmt(coin.mean_buy)} ${currency}`);
+  $tile.find(".buy_value").text(`${fmt(coin.buy_value)} ${currency}`);
+
+  $tile.find(".pnl_data")
+    .text(`${sign}${formattedPnl} ${symbol}`)
+    .css("color", pnlColor);
+
+  // Affichage du PnL dans le header seulement en mode minified
+  $tile.find(".detail_elem_header .pnl_data")
+    .css("display", minified ? "inline-block" : "none");
 }
 
 function disconnect() {
@@ -1649,7 +1739,7 @@ function generateNpushTradeTile(data) {
 
   $(item)
     .find(".price_line")
-    .text(fixNumber(data.priceUSDC, 2) + " $");
+    .text(fixNumber(data.priceUSDC, 2, {limit: 4, val: 2}) + " $");
   $(item)
     .find(".amount_value")
     .text(fixNumber(data.amountUSDC, 2) + " $");
@@ -1678,19 +1768,17 @@ function loadTradeData(trades, limit = 50) {
   const rowsFull = rowsWithRealized(trades, { 
     filter: buyOrSell, 
     coinFilter: tradeFocusedCoin,
-    windowMs: 2000,
-    limit: null
+    windowMs: 2000
   });
 
   const rows = rowsFull.slice(0, limit);
 
-  let totalPnl = null;
   if (params.isPercentage) {
     const sells = rowsFull.filter(r => r.side === "SELL" && Number.isFinite(Number(r.realizedPnlPct)));
     const totalPct = sells.length ? sells.reduce((s, r) => s + Number(r.realizedPnlPct), 0) / sells.length : 0;
     formatPnl($(".tradeHistory_pnl"), totalPct, "%", 2);
   }else{
-    totalPnl = rowsFull.reduce((sum, r) => sum + (r.realizedPnlUSDC || 0), 0);
+    const totalPnl = rowsFull.reduce((sum, r) => sum + (r.realizedPnlUSDC || 0), 0);
     formatPnl($(".tradeHistory_pnl"), totalPnl, "$", 2);
   };
 
@@ -2346,7 +2434,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.3</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.5</span>'
     )
   );
 
