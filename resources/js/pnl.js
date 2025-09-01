@@ -9,8 +9,8 @@ jQuery.fn.getStyleValue = function (prop) {
 // CONFIG & GLOBALS
 // ------------------------------------------------------
 
-const WORKER_URL = "http://127.0.0.1:8787";
-// const WORKER_URL = "https://johnathan-denobetterp-43-rehbv5e0phsa.deno.dev";
+// const WORKER_URL = "http://127.0.0.1:8787";
+const WORKER_URL = "https://johnathan-denobetterp-43-rehbv5e0phsa.deno.dev";
 const PUB_WS = "wss://stream.binance.com:9443/stream";
 const USER_WS = "wss://stream.binance.com:9443/ws";
 
