@@ -9,8 +9,8 @@ jQuery.fn.getStyleValue = function (prop) {
 // CONFIG & GLOBALS
 // ------------------------------------------------------
 
-// const WORKER_URL = "http://127.0.0.1:8787";
-const WORKER_URL = "https://johnathan-denobetterp-43-rehbv5e0phsa.deno.dev";
+const WORKER_URL = "http://127.0.0.1:8787";
+// const WORKER_URL = "https://johnathan-denobetterp-43-rehbv5e0phsa.deno.dev";
 const PUB_WS = "wss://stream.binance.com:9443/stream";
 const USER_WS = "wss://stream.binance.com:9443/ws";
 
@@ -56,8 +56,7 @@ coinPrices = coinPrices || {};
 
 const stableCoins = {
   USDC: { label: "USDC", short: "$", conversionRate: 1 },
-  // TRY: { label: "TRY", short: "₺", conversionRate: null },
-  EUR: { label: "EUR", short: "€", conversionRate: null },
+  EUR:  { label: "EUR",  short: "€", conversionRate: null },
 };
 
 // ------------------------------------------------------
@@ -1734,12 +1733,18 @@ function generateNpushTradeTile(data) {
   $(item).find(".tradeHistory_item_currLabel").text(data.base);
   $(item)
     .find(".tradeHistory_item_currAmount")
-    .text(fixNumber(data.amountToken, 2));
+    .text(fixNumberTEST(data.amountToken, {
+      digits: 5
+    }));
   $(item).find(".tradeHistory_item_date").text(formatTimestamp(data.time));
 
   $(item)
     .find(".price_line")
-    .text(fixNumber(data.priceUSDC, 2, {limit: 4, val: 2}) + " $");
+    .text(fixNumberTEST(data.priceUSDC, {
+      digits: 5,
+      maxDecimals: 4,
+      pad: true
+    }) + " $");
   $(item)
     .find(".amount_value")
     .text(fixNumber(data.amountUSDC, 2) + " $");
@@ -2281,7 +2286,10 @@ function recomputePortfolio() {
   // 1) Construire le snapshot (en USDC)
   Object.entries(positions).forEach(([asset, pos]) => {
     if (asset.endsWith("USDC") && asset !== "USDC") return; // safety
-    if (pos.qty * pos.cost <= 0.5 && !stableCoins.hasOwnProperty(asset)) return;
+    if (pos.qty * pos.cost <= 2 && !stableCoins.hasOwnProperty(asset)) {
+      bank += pos.qty * pos.cost; 
+      return;
+    };
 
     if (stableCoins.hasOwnProperty(asset)) {
       // ⚠️ plus de fallback "1" : si conversion inconnue => 0 (on n'affiche pas encore)
@@ -2328,6 +2336,7 @@ function recomputePortfolio() {
     coins,
     global: { bank, pnl: pnlSum },
   };
+
   walletData = nextWallet;
 
   // 2) NE RENDRE QUE SI tout est "pricé" (évite bank qui grimpe par étapes)
@@ -2434,7 +2443,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.5</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.6</span>'
     )
   );
 
@@ -2790,32 +2799,17 @@ async function pnl() {
     let maxScroll = Math.floor(
       $(this).getStyleValue("width") + $(this).getStyleValue("gap")
     );
+
     let scroll = Math.floor($(this).scrollLeft());
+    let scrollPerc = scroll / maxScroll;
 
-    if (scroll <= 0) {
-      $(this)
-        .parent()
-        .find(".global_elem_indicator_bar")
-        .eq(0)
-        .css("backgroundColor", "white");
-      $(this)
-        .parent()
-        .find(".global_elem_indicator_bar")
-        .eq(1)
-        .css("backgroundColor", "black");
-    } else if (scroll >= maxScroll) {
-      $(this)
-        .parent()
-        .find(".global_elem_indicator_bar")
-        .eq(1)
-        .css("backgroundColor", "white");
-      $(this)
-        .parent()
-        .find(".global_elem_indicator_bar")
-        .eq(0)
-        .css("backgroundColor", "black");
-    }
+    // get index of scrollable element within global_wrapper
+    let indicators = $(this).parent().find('.global_elem_indicator').children();
 
+    // abrupt linear gradient from white to black and black to white
+    $(indicators).eq(0).css("background", `linear-gradient(90deg,rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) ${Math.floor(scrollPerc * 100)}%, rgba(255, 255, 255, 1) ${Math.floor(scrollPerc * 100)}%, rgba(255, 255, 255, 1) 100%)`);
+    $(indicators).eq(1).css("background", `linear-gradient(90deg,rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) ${Math.floor(scrollPerc * 100)}%, rgba(0, 0, 0, 1) ${Math.floor(scrollPerc * 100)}%, rgba(0, 0, 0, 1) 100%)`);
+    
     if ($(this).parent().is(".pnl") && (scroll <= 0 || scroll >= maxScroll)) {
       params.onLoadPnlType = scroll <= 0 ? "ongoing" : "allTime";
       params_save(params);
@@ -2837,7 +2831,7 @@ async function pnl() {
     $("#api_key-val").val(API.API);
     $("#api_secret-val").val(API.SECRET);
 
-    // $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
+    $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
 
     getDataAndDisplay(false);
   } else {
