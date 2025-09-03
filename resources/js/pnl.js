@@ -403,44 +403,17 @@ function resizeInput(input) {
 // 3) FETCH + HMAC + WORKER PROXY
 // ------------------------------------------------------
 
-async function signHmacSha256(qs, secret) {
+async function signHmacSha256(qs, secret){
   const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(qs));
-  return [...new Uint8Array(sig)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const key = await crypto.subtle.importKey("raw",enc.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const sig = await crypto.subtle.sign("HMAC",key,enc.encode(qs));
+  return [...new Uint8Array(sig)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 
-async function fetchJSON(url, opts) {
-  const r = await fetch(url, opts);
-  const text = await r.text();
-  if (!r.ok) {
-    let detail = text;
-    try {
-      const j = JSON.parse(text);
-      const m = j.msg || j.message || text;
-      detail = j.code !== undefined ? `${j.code} ${m}` : m;
-    } catch {
-      /* texte brut */
-    }
-    throw new Error(`HTTP ${r.status} – ${detail}`);
-  }
-  return text ? JSON.parse(text) : {};
-}
+async function fetchJSON(url,opts){ const r=await fetch(url,opts); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
 
-async function proxySigned(apiKey, endpoint, queryString) {
-  return fetchJSON(`${WORKER_URL}/proxySigned`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ apiKey, endpoint, queryString }),
-  });
+async function proxySigned(apiKey, endpoint, queryString){
+  return fetchJSON(`${WORKER_URL}/proxySigned`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({apiKey,endpoint,queryString})});
 }
 
 // ------------------------------------------------------
@@ -463,86 +436,20 @@ async function keepAliveKey(apiKey, lk) {
   });
 }
 
-async function connectUserWS(apiKey, handlers) {
-  // Nettoie l'ancien intervalle (au cas où) et ferme l'ancien WS
-  if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
-  if (userWs) { try { userWs.close(); } catch (_) {} }
-
-  const lk = await createListenKey(apiKey);
-
-  try {
-    userWs = new WebSocket(`${USER_WS}/${lk}`);
-  } catch (error) {
-    throw error;
-  }
-
-  // (Re)démarre le keep-alive lié à ce listenKey
-  userWsKeepAliveId = setInterval(() => keepAliveKey(apiKey, lk), 30 * 60 * 1000);
-
-  userWs.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    switch (msg.e) {
-      case "outboundAccountPosition":
-        handlers.onBalances(msg.B);
-        break;
-      case "executionReport":
-        handlers.onOrderUpdate(msg);
-        break;
-      case "balanceUpdate":
-        handlers.onBalanceUpdate(msg);
-        break;
-      default:
-        console.debug(msg);
-    }
-  };
-
-  userWs.onerror = (err) => {
-    console.error(err);
-    if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
-  };
-
-  userWs.onclose = () => {
-    console.warn("User WS closed");
-    if (userWsKeepAliveId) { clearInterval(userWsKeepAliveId); userWsKeepAliveId = null; }
-  };
+async function connectUserWS(apiKey, handlers){
+  if(userWs) userWs.close(); const lk=await createListenKey(apiKey);
+  userWs=new WebSocket(`${USER_WS}/${lk}`);
+  userWs.onmessage=e=>{ const msg=JSON.parse(e.data); switch(msg.e){ case"outboundAccountPosition":handlers.onBalances(msg.B);break; case"executionReport":handlers.onOrderUpdate(msg);break; case"balanceUpdate":handlers.onBalanceUpdate(msg);break; default:console.debug(msg);} };
+  userWs.onerror=console.error; userWs.onclose=()=>console.warn("User WS closed");
+  setInterval(()=>keepAliveKey(apiKey,lk),30*60*1000);
 }
 
-function connectPriceWS(assets, onPrice) {
-  if (priceWs) priceWs.close();
-
-  const baseStreams = (assets || []).map(
-    (a) => `${a.toLowerCase()}usdc@ticker`
-  );
-  const stableStreams = Object.keys(stableCoins)
-    .filter((s) => s !== "USDC")
-    .map((s) => `${s.toLowerCase()}usdc@ticker`);
-
-  const streams = [...new Set([...baseStreams, ...stableStreams])].join("/");
-  if (!streams) return;
-
-  try {
-    priceWs = new WebSocket(`${PUB_WS}?streams=${streams}`);
-  } catch (error) {
-    throw error;
-  }
-
-  priceWs.onmessage = (e) => {
-    const { data } = JSON.parse(e.data);
-    const sym = data.s;
-    const px = parseFloat(data.c);
-
-    onPrice(sym, px); // alimente coinPrices[sym]
-
-    // si c'est <STABLE>USDC, mémorise la conversion
-    for (const sc in stableCoins) {
-      if (sym === sc + "USDC") {
-        stableCoins[sc].conversionRate = px;
-        break;
-      }
-    }
-  };
-  priceWs.onerror = console.error;
-  priceWs.onclose = () => console.warn("Public WS closed");
+function connectPriceWS(assets, onPrice){
+  if(priceWs) priceWs.close(); if(!assets.length) return;
+  const streams=assets.map(a=>a.toLowerCase()+"usdc@ticker").join("/");
+  priceWs=new WebSocket(`${PUB_WS}?streams=${streams}`);
+  priceWs.onmessage=e=>{ const {data}=JSON.parse(e.data); onPrice(data.s,parseFloat(data.c)); };
+  priceWs.onerror=console.error; priceWs.onclose=()=>console.warn("Public WS closed");
 }
 
 async function getFiatHistoryFirstPage(apiKey, apiSecret, transactionType) {
@@ -2443,7 +2350,7 @@ async function getDataAndDisplay(refresh = false) {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.6</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.7</span>'
     )
   );
 
