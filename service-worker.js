@@ -1,4 +1,4 @@
-const CACHE_NAME = "app-cache-v6.4";
+const CACHE_NAME = "app-cache-v6.5";
 
 self.addEventListener("install", (event) => {
     self.skipWaiting();
@@ -83,24 +83,35 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-self.addEventListener("fetch", event => {
-    event.respondWith(
-        caches.open(CACHE_NAME).then(cache => { 
-            return cache.match(event.request).then(response => {
-                const fetchPromise = fetch(event.request).then(networkResponse => {
-                    if (event.request.method === "GET") {
-                        cache.put(event.request, networkResponse.clone()); // Update cache with new response
-                    }
-                    return networkResponse;
-                }).catch(error => {
-                    console.error("Fetch failed for:", event.request.url, "; Error:", error);
-                    return response; // Return cached response if fetch fails
-                });
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
 
-                return response || fetchPromise;
-            });
-        })
-    );
+  // 🚫 Ne jamais mettre en cache les appels API / proxy
+  if (url.pathname.startsWith("/proxy") || url.pathname.startsWith("/listenKey")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Cache-first pour les assets statiques
+  event.respondWith(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(event.request).then((response) => {
+        const fetchPromise = fetch(event.request)
+          .then((networkResponse) => {
+            if (event.request.method === "GET") {
+              cache.put(event.request, networkResponse.clone());
+            }
+            return networkResponse;
+          })
+          .catch((error) => {
+            console.error("Fetch failed:", event.request.url, error);
+            return response; // fallback cache
+          });
+
+        return response || fetchPromise;
+      })
+    )
+  );
 });
 
 self.addEventListener("notificationclick", event => {
