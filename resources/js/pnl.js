@@ -59,6 +59,16 @@ const stableCoins = {
   EUR:  { label: "EUR",  short: "€", conversionRate: null },
 };
 
+// Pump/Crash detection config
+const PUMP_CRASH_CONFIG = {
+  growthTrigger: 1.75,   // % variation pour déclencher
+  timeWindow: 20000,    // fenêtre en ms (20s par défaut)
+  cooldown: 60000       // cooldown min entre deux notifs (60s)
+};
+
+let pumpCrashHistory = [];   // historique {time, bank}
+let lastPumpCrashNotif = 0;  // timestamp dernière notif
+
 // ------------------------------------------------------
 // 1) STORAGE & PARAMS
 // ------------------------------------------------------
@@ -510,12 +520,16 @@ async function connectUserWS(apiKey, handlers) {
 function connectPriceWS(assets, onPrice) {
   if (priceWs) priceWs.close();
 
-  const baseStreams = (assets || []).map(
-    (a) => `${a.toLowerCase()}usdc@ticker`
-  );
+  // construire la liste des streams TICKER *valides*
+  const baseStreams = (assets || [])
+    .map(a => `${a}USDC`)                 // on ne quote qu'en USDC dans cette app
+    .filter(sym => hasPair(splitSymbol(sym).base, splitSymbol(sym).quote)) // <<< NOUVEAU
+    .map(sym => `${sym.toLowerCase()}@ticker`);
+
+  // streams des stables vs USDC *uniquement si la paire existe*
   const stableStreams = Object.keys(stableCoins)
-    .filter((s) => s !== "USDC")
-    .map((s) => `${s.toLowerCase()}usdc@ticker`);
+    .filter(s => s !== "USDC" && hasPair(s, "USDC")) // <<< NOUVEAU
+    .map(s => `${(s + "USDC").toLowerCase()}@ticker`);
 
   const streams = [...new Set([...baseStreams, ...stableStreams])].join("/");
   if (!streams) return;
@@ -531,9 +545,8 @@ function connectPriceWS(assets, onPrice) {
     const sym = data.s;
     const px = parseFloat(data.c);
 
-    onPrice(sym, px); // alimente coinPrices[sym]
+    onPrice(sym, px);
 
-    // si c'est <STABLE>USDC, mémorise la conversion
     for (const sc in stableCoins) {
       if (sym === sc + "USDC") {
         stableCoins[sc].conversionRate = px;
@@ -1334,49 +1347,44 @@ function NotificationGrantMouseDownHandler() {
   $(document).off("click", NotificationGrantMouseDownHandler);
 }
 
-function isApop(walletData, oldWalletData) {
-  if (!oldWalletData) return;
+function checkPumpCrash(oldPnl, newPnl, positions) {
+  if (!Number.isFinite(oldPnl) || !Number.isFinite(newPnl)) return;
 
-  const currentPNL = parseFloat(walletData.global.pnl);
-  const oldPNL = parseFloat(oldWalletData.global.pnl); // Ensure oldPNL is a number
+  // somme des buy_value (seulement pour coins non stables)
+  const totalBuyValue = positions
+    .filter(c => !stableCoins.hasOwnProperty(c.asset))
+    .reduce((sum, c) => sum + (c.buy_value || 0), 0);
 
-  const currentBank = parseFloat(walletData.global.bank);
-  const oldBank = parseFloat(oldWalletData.global.bank);
+  if (totalBuyValue <= 0) return; // rien à monitorer
 
-  if (isNacN(currentPNL) || isNacN(oldPNL)) {
-    console.error("Invalid PNL values.");
-    return;
-  }
+  const diff = newPnl - oldPnl;
+  const pct = (diff / totalBuyValue) * 100;
 
-  const difference = currentPNL - oldPNL;
-  const percentageChange = ((currentPNL - oldPNL) / Math.abs(oldPNL)) * 100;
+  const now = Date.now();
+  if (now - lastPumpCrashNotif < PUMP_CRASH_CONFIG.cooldown) return;
 
-  if (percentageChange >= 4.5) {
+  if (pct >= PUMP_CRASH_CONFIG.growthTrigger) {
     showNotif({
       title: "PUMP DETECTED",
-      body:
-        "ONGOING PNL +" +
-        Math.abs(percentageChange).toFixed(2).toString() +
-        "% | +" +
-        Math.abs(difference).toFixed(2).toString() +
-        "$",
+      body: `PNL +${pct.toFixed(2)}% | +${diff.toFixed(2)} $`
     });
-    console.log("PUMP");
-  } else if (percentageChange <= -3.5) {
-    if (Math.abs(currentBank - oldBank) < 1) return;
+    lastPumpCrashNotif = now;
+  } else if (pct <= -PUMP_CRASH_CONFIG.growthTrigger) {
     showNotif({
       title: "CRASH DETECTED",
-      body:
-        "ONGOING PNL -" +
-        Math.abs(percentageChange).toFixed(2).toString() +
-        "% | -" +
-        Math.abs(difference).toFixed(2).toString() +
-        "$",
+      body: `PNL ${pct.toFixed(2)}% | ${diff.toFixed(2)} $`
     });
-    console.log("CRASH");
+    lastPumpCrashNotif = now;
   }
+}
 
-  return;
+function isApop(walletData, oldWalletData) {
+  if (!oldWalletData) return;
+  checkPumpCrash(
+    oldWalletData.global.pnl,
+    walletData.global.pnl,
+    walletData.coins
+  );
 }
 
 // HANDLER FUNCTION
@@ -2100,42 +2108,72 @@ function meanBuyUpdate(price, quantity) {
 // INIT REAL-TIME + BACKFILL COST BASIS
 // ------------------------------------------------------
 
+// ---- ExchangeInfo cache pour filtrer les paires valides ----
+let EXCHANGE_INFO = null;          // { symbolSet: Set<string>, matrix: Map<base, Set<quote>> }
+
+async function loadExchangeInfo(){
+  if (EXCHANGE_INFO) return EXCHANGE_INFO;
+
+  // via ton proxy public
+  const info = await fetchJSON(`${WORKER_URL}/proxyPublic?endpoint=/api/v3/exchangeInfo`);
+  const symbolSet = new Set();
+  const matrix = new Map();
+
+  for (const s of info.symbols || []) {
+    if (s.status !== "TRADING") continue;
+    const base = s.baseAsset;
+    const quote = s.quoteAsset;
+    const sym = `${base}${quote}`;
+    symbolSet.add(sym);
+
+    if (!matrix.has(base)) matrix.set(base, new Set());
+    matrix.get(base).add(quote);
+  }
+
+  EXCHANGE_INFO = { symbolSet, matrix };
+  return EXCHANGE_INFO;
+}
+
+function hasPair(base, quote) {
+  return !!(EXCHANGE_INFO && EXCHANGE_INFO.symbolSet.has(`${base}${quote}`));
+}
+
 async function initRealTime(apiKey, apiSecret, onPrice) {
   const recvWindow = 60000;
 
-  // 0) Prime conversions des stables -> USDC (EURUSDC, USDTUSDC, ...)
+  // 0) Prime conversions (inchangé)
   await primeStableConversions();
 
-  // 1) Snapshot compte (balances)
+  // 0bis) Charger les paires valides une fois
+  await loadExchangeInfo(); // <<< NOUVEAU
+
+  // 1) Snapshot compte
   const ts = await binanceTs();
   let qs0 = `timestamp=${ts}&recvWindow=${recvWindow}`;
   const sig0 = await signHmacSha256(qs0, apiSecret);
   qs0 += `&signature=${sig0}`;
-
   const snapshot = await proxySigned(apiKey, "/api/v3/account", qs0);
 
-  // 2) Init positions à partir des balances
+  // 2) Init positions
   positions = positions || {};
-  Object.keys(positions).forEach(k => delete positions[k]); // reset propre
-
+  Object.keys(positions).forEach(k => delete positions[k]);
   snapshot.balances.forEach((b) => {
     const qty = parseFloat(b.free) + parseFloat(b.locked);
     if (qty > 0) positions[b.asset] = { qty, cost: 0 };
   });
 
-  // 3) Backfill coût moyen (depuis dernier quasi-zéro) + Trade Store bootstrap
-  //    - coût moyen: on s'arrête au premier symbole qui renvoie des trades
-  //    - trade store: on agrège TOUTES les paires <asset><stable> trouvées
+  // 3) Backfill coût moyen + bootstrap trades
   await Promise.all(
     Object.keys(positions).map(async (asset) => {
       if (stableCoins[asset]) return;
 
       let costSet = false;
 
-      // boucle sur toutes les stables connues (USDC, USDT, EUR, ...)
-      for (const quote of Object.keys(stableCoins)) {
-        const sym = asset + quote;
+      // Filtrer les quotes aux seules paires existantes
+      const validQuotes = Object.keys(stableCoins).filter(q => hasPair(asset, q)); // <<< NOUVEAU
 
+      for (const quote of validQuotes) {
+        const sym = asset + quote;
         try {
           const ts2 = await binanceTs();
           let qs2 = `symbol=${sym}&timestamp=${ts2}&recvWindow=${recvWindow}`;
@@ -2144,34 +2182,31 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
 
           const trades = await proxySigned(apiKey, "/api/v3/myTrades", qs2);
 
-          // 3a) Alimente le trade store (toutes les paires)
           if (Array.isArray(trades) && trades.length) {
             trades_appendBatch(trades);
           }
-
-          // 3b) Premier symbole qui a des trades -> calcule le coût moyen
           if (!costSet && Array.isArray(trades) && trades.length) {
             const avg = computeAveragePrice(trades);
             if (avg !== null) {
-              positions[asset].cost = avg; // en USDC (computeAveragePrice gère la conversion)
+              positions[asset].cost = avg;
               costSet = true;
             }
           }
         } catch (_) {
-          // ignorer les symboles inexistants / sans droit / sans trades
+          // silence: throttling temporaire ou autre
         }
       }
     })
   );
 
-  // 4) Premier rendu des données calculées
+  // 4) Premier rendu
   recomputePortfolio();
 
-  // 5) Flux temps réel (prix publics + user data)
+  // 5) Flux temps réel (voir patch connectPriceWS ci-dessous)
   connectPriceWS(Object.keys(positions), onPrice);
   connectUserWS(apiKey, {
     onBalances: handleAccountPosition,
-    onOrderUpdate: handleOrderUpdate,   // <- notre handler ci-dessous
+    onOrderUpdate: handleOrderUpdate,
     onBalanceUpdate: handleBalanceUpdate,
   });
 }
@@ -2353,9 +2388,7 @@ function recomputePortfolio() {
 
   // Persistance (seulement quand tout est validé)
   if (allValidNow) {
-    try {
-      old_save(walletData);
-    } catch {}
+    try { old_save(walletData) } catch {}
 
     // 3) Premier affichage "complet" : peindre puis retirer les skeletons
     if (firstLog) {
@@ -2406,8 +2439,18 @@ function recomputePortfolio() {
     if (fullyLoaded) {
       displayNewData(walletData);
     }
+
+    // LIVE pump/crash detection
+    const now = Date.now();
+    pumpCrashHistory.push({ time: now, pnl: pnlSum });
+    pumpCrashHistory = pumpCrashHistory.filter(p => now - p.time <= PUMP_CRASH_CONFIG.timeWindow);
+
+    if (pumpCrashHistory.length > 1) {
+      const first = pumpCrashHistory[0].pnl;
+      const last  = pumpCrashHistory[pumpCrashHistory.length - 1].pnl;
+      checkPumpCrash(first, last, coins);
+    }
   }
-  // Si !allValidNow : on NE PEINT PAS (garde l’ancien affichage) => pas de flash, pas de bank qui grimpe
 }
 
 // ------------------------------------------------------
@@ -2451,7 +2494,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v4.8</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.0</span>'
     )
   );
 
@@ -2529,12 +2572,19 @@ async function pnl() {
           coinPrices[asset] = price;
           recomputePortfolio();
         });
+
+        // <<< IMPORTANT : remettre l'état OK visuellement
+        $(".detail_connect").css("display", "none").text("CONNECT TO API");
+        bottomNotification("connected");
       } catch (e) {
+        // Erreurs réelles seulement (réseau, 5xx, auth). Les symboles invalides sont filtrés en amont.
+        console.error("Re-init on visibility failed:", e);
         bottomNotification("fetchError");
         clearData("error");
       }
     }
   });
+
 
   // FILTERS & FETCHING
 
