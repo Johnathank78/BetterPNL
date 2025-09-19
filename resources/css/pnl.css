@@ -251,8 +251,9 @@ body{
 }
 
 .minifier{
-    text-align: center;
-    line-height: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 
     font-size: 18px;
     height: 30px;
@@ -263,6 +264,13 @@ body{
     border-radius: 8px;
     background-color: var(--superLight-color);
     cursor: pointer;
+}
+
+.minifier_icon{
+    cursor: pointer;
+
+    width: 17   px;
+    height: 17  px;
 }
 
 .detail_connect{
