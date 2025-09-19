@@ -56,7 +56,9 @@ coinPrices = coinPrices || {};
 
 const stableCoins = {
   USDC: { label: "USDC", short: "$", conversionRate: 1 },
+  USDT: { label: "USDT", short: "$", conversionRate: 1 },
   EUR:  { label: "EUR",  short: "€", conversionRate: null },
+  TRY : { label: "TRY", short: "₺", conversionRate: null, invert: true},
 };
 
 // Pump/Crash detection config
@@ -157,16 +159,59 @@ function formatTimestamp(timestamp) {
 
 async function primeStableConversions() {
   const targets = Object.keys(stableCoins).filter((s) => s !== "USDC");
+
   await Promise.all(
     targets.map(async (q) => {
-      try {
+      const sc = stableCoins[q];
+      const locked = sc?.conversionRate === 1;
+      if (locked) return;
+
+      // déjà connu ?
+      if (typeof sc?.conversionRate === "number" && sc.conversionRate > 0) return;
+
+      const preferInverse = !!sc?.invert;
+
+      // helper
+      const fetchPrice = async (sym) => {
         const res = await fetchJSON(
-          `${WORKER_URL}/proxyPublic?endpoint=/api/v3/ticker/price&symbol=${q}USDC`
+          `${WORKER_URL}/proxyPublic?endpoint=/api/v3/ticker/price&symbol=${sym}`
         );
-        const px = parseFloat(res.price);
-        if (px > 0) {
-          stableCoins[q].conversionRate = px;
-          coinPrices[q + "USDC"] = px;
+        return parseFloat(res?.price);
+      };
+
+      try {
+        if (preferInverse) {
+          // USDCq -> 1/px
+          const pxInv = await fetchPrice(`USDC${q}`);
+          if (pxInv > 0 && sc.conversionRate !== 1) {
+            const r = 1 / pxInv;
+            sc.conversionRate = r;
+            coinPrices[q + "USDC"] = r;
+            coinPrices["USDC" + q] = pxInv;
+            return;
+          }
+          // fallback direct
+          const pxDir = await fetchPrice(`${q}USDC`);
+          if (pxDir > 0 && sc.conversionRate !== 1) {
+            sc.conversionRate = pxDir;
+            coinPrices[q + "USDC"] = pxDir;
+          }
+        } else {
+          // qUSDC direct
+          const pxDir = await fetchPrice(`${q}USDC`);
+          if (pxDir > 0 && sc.conversionRate !== 1) {
+            sc.conversionRate = pxDir;
+            coinPrices[q + "USDC"] = pxDir;
+            return;
+          }
+          // fallback inverse
+          const pxInv = await fetchPrice(`USDC${q}`);
+          if (pxInv > 0 && sc.conversionRate !== 1) {
+            const r = 1 / pxInv;
+            sc.conversionRate = r;
+            coinPrices[q + "USDC"] = r;
+            coinPrices["USDC" + q] = pxInv;
+          }
         }
       } catch (_) {}
     })
@@ -184,18 +229,31 @@ function splitSymbol(symbol) {
 
 function getQuoteToUSDC(quote) {
   if (quote === "USDC") return 1;
-  const fromStable = stableCoins[quote]?.conversionRate;
-  if (typeof fromStable === "number" && isFinite(fromStable) && fromStable > 0)
-    return fromStable;
-  const fromPrices = coinPrices[quote + "USDC"];
-  if (
-    typeof fromPrices === "number" &&
-    isFinite(fromPrices) &&
-    fromPrices > 0
-  ) {
-    if (stableCoins[quote]) stableCoins[quote].conversionRate = fromPrices;
-    return fromPrices;
+
+  const sc = stableCoins[quote];
+  if (!sc) return null;
+
+  // lock à 1 => approximation assumée, pas de résolution
+  if (sc.conversionRate === 1) return 1;
+  if (typeof sc.conversionRate === "number" && sc.conversionRate > 0) return sc.conversionRate;
+
+  // lecture depuis le cache tickers (coinPrices)
+  if (sc.invert) {
+    const inv = coinPrices["USDC" + quote];
+    if (typeof inv === "number" && inv > 0) {
+      const r = 1 / inv;
+      sc.conversionRate = r;            // mémo
+      coinPrices[quote + "USDC"] = r;   // aligne la clé “directe”
+      return r;
+    }
+  } else {
+    const direct = coinPrices[quote + "USDC"];
+    if (typeof direct === "number" && direct > 0) {
+      sc.conversionRate = direct;
+      return direct;
+    }
   }
+
   return null; // pas encore connu
 }
 
@@ -1124,7 +1182,7 @@ function fetchStyleUpdate(fetching, refresh = false) {
 
     $(".refresh_container").css("opacity", ".3");
   } else {
-    $(".detail_elem_wrapper, .minifier").css("pointer-events", "all");
+    $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "all");
     $(".refresh_container").css("opacity", "1");
     $(".skeleton").removeClass("skeleton");
   }
@@ -1464,20 +1522,16 @@ function backerMouseupHandler() {
 let allminified = false;
 
 function minifyTileHandler(elem, minify) {
-  // let minified = $(elem).data("minified") ?? false;
   let name = $(elem).find(".detail_elem_name").text();
   let coin = getCoin(walletData.coins, name)[0] ?? false;
 
   if (minify) {
-    // params.minified[name] = true;
     minifyTile(elem, coin, true, true);
   } else {
-    // params.minified[name] = false;
     minifyTile(elem, coin, false, true);
   }
 
   $(elem).data("minified", minify);
-  // params_save(params);
 }
 
 // TRADES
@@ -1570,44 +1624,61 @@ function openPositionsSet() {
   );
 }
 
-function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs = 2000 } = {}) {
-  const QTY_EPS = 1e-12;
+function rowsWithRealized(
+  trades,
+  { filter = "ALL", coinFilter = "ALL", windowMs = 2000 } = {}
+) {
+  const QTY_EPS   = 1e-12;
   const DUST_USDC = 1;
 
   const isDust = (st) => st.qty <= QTY_EPS || st.cost <= DUST_USDC;
 
+  // Agrégation par fenêtres puis tri chrono ↑ pour dérouler le "ledger"
   const groups = aggregateTrades(trades, { windowMs })
-    .sort((a, b) => a.firstTime - b.firstTime); // chronologique ↑
+    .sort((a, b) => a.firstTime - b.firstTime);
 
+  // Ledger par base: { qty, cost } en USDC
   const ledger = new Map();
 
   const rows = groups.map((g) => {
     const q2u       = getQuoteToUSDC(g.quote) ?? 0;
     const priceUSDC = g.priceAvg && q2u ? g.priceAvg * q2u : 0;
-    const amountUSD = priceUSDC ? g.qty * priceUSDC : 0;
+    const amountUSDC = priceUSDC ? g.qty * priceUSDC : 0;
 
-    const feeUSDC = g.fees.reduce((sum, f) =>
-      sum + convertToUSDC({
-        asset: f.asset, amount: f.amount,
-        base: g.base, quote: g.quote, priceAvg: g.priceAvg
-      }), 0
+    // Total fees en USDC
+    const feeUSDC = g.fees.reduce(
+      (sum, f) =>
+        sum +
+        convertToUSDC({
+          asset: f.asset,
+          amount: f.amount,
+          base: g.base,
+          quote: g.quote,
+          priceAvg: g.priceAvg,
+        }),
+      0
     );
 
     const st  = ledger.get(g.base) || { qty: 0, cost: 0 }; // cost en USDC
-    const avg = st.qty > QTY_EPS ? (st.cost / st.qty) : 0;
+    const avg = st.qty > QTY_EPS ? st.cost / st.qty : 0;
 
+    // Valeurs spécifiques aux SELL
+    let sellQty = 0;
+    let costSold = null;
+    let revenueNet = null;
     let realized = null;
 
     if (g.side === "BUY") {
       if (isDust(st)) { st.qty = 0; st.cost = 0; }
       st.qty  += g.qty;
-      st.cost += amountUSD + feeUSDC;
+      st.cost += amountUSDC + feeUSDC; // on capitalise les fees dans le coût
     } else {
-      const sellQty   = Math.min(g.qty, st.qty || 0);
-      const proceeds  = amountUSD;
-      const costSold  = sellQty * avg;
-      realized = (proceeds - feeUSDC) - costSold;
+      sellQty    = Math.min(g.qty, st.qty || 0);
+      costSold   = sellQty * avg;              // coût historique cédé
+      revenueNet = amountUSDC - feeUSDC;       // produit net (proceeds - fees)
+      realized   = revenueNet - costSold;      // P&L réalisé
 
+      // décrément du stock au coût historique
       st.qty  = Math.max(0, st.qty - sellQty);
       st.cost = Math.max(0, st.cost - costSold);
 
@@ -1621,33 +1692,37 @@ function rowsWithRealized(trades, { filter = "ALL", coinFilter = "ALL", windowMs
       symbol: g.symbol,
       base: g.base,
       quote: g.quote,
-      side: g.side,                   // "BUY" | "SELL"
+      side: g.side,                 // "BUY" | "SELL"
       parts: g.parts,
       amountToken: g.qty,
-      amountUSDC: amountUSD,
-      priceUSDC: priceUSDC,
-      feeUSDC: feeUSDC,
-      realizedPnlUSDC: g.side === "SELL" ? realized : null,
-      realizedPnlPct: (g.side === "SELL" && (amountUSD - feeUSDC) > 0)
-        ? (realized / (amountUSD - feeUSDC)) * 100
+      amountUSDC,
+      priceUSDC,
+      feeUSDC,
+
+      // Champs SELL only
+      costSoldUSDC:   g.side === "SELL" ? costSold   : null,
+      revenueNetUSDC: g.side === "SELL" ? revenueNet : null,
+      realizedPnlUSDC:g.side === "SELL" ? realized   : null,
+      realizedPnlPct: (g.side === "SELL" && costSold > 0)
+        ? (realized / costSold) * 100
         : null,
     };
   });
 
-  // Tri récent→ancien
+  // Tri récent → ancien
   let out = rows.sort((a, b) => b.time - a.time);
 
   // Filtre: ALL | BUY | SELL
   const f = (filter || "ALL").toUpperCase();
-  if (f === "BUY")  out = out.filter(r => r.side === "BUY");
-  if (f === "SELL") out = out.filter(r => r.side === "SELL");
+  if (f === "BUY")  out = out.filter((r) => r.side === "BUY");
+  if (f === "SELL") out = out.filter((r) => r.side === "SELL");
 
   // Filtre coin (par base). Accepte "ETH", "ETHUSDC", "ETH/USDC", etc.
   const cf = (coinFilter || "ALL").toUpperCase().trim();
   if (cf !== "ALL") {
     let desiredBase = cf;
     try { desiredBase = splitSymbol(cf).base.toUpperCase(); } catch {}
-    out = out.filter(r => r.base.toUpperCase() === desiredBase);
+    out = out.filter((r) => r.base.toUpperCase() === desiredBase);
   }
 
   return out;
@@ -1786,14 +1861,19 @@ function loadTradeData(trades, limit = 50) {
 
   const rows = rowsFull.slice(0, limit);
 
+  const sells = rowsFull.filter(r =>
+    r.side === "SELL" && Number.isFinite(r.realizedPnlUSDC) && Number.isFinite(r.costSoldUSDC) && r.costSoldUSDC > 0
+  );
+
   if (params.isPercentage) {
-    const sells = rowsFull.filter(r => r.side === "SELL" && Number.isFinite(Number(r.realizedPnlPct)));
-    const totalPct = sells.length ? sells.reduce((s, r) => s + Number(r.realizedPnlPct), 0) / sells.length : 0;
+    const sumReal = sells.reduce((s, r) => s + r.realizedPnlUSDC, 0);
+    const sumCost = sells.reduce((s, r) => s + r.costSoldUSDC, 0);
+    const totalPct = sumCost > 0 ? (sumReal / sumCost) * 100 : 0;
     formatPnl($(".tradeHistory_pnl"), totalPct, "%", 2);
-  }else{
-    const totalPnl = rowsFull.reduce((sum, r) => sum + (r.realizedPnlUSDC || 0), 0);
+  } else {
+    const totalPnl = sells.reduce((s, r) => s + r.realizedPnlUSDC, 0);
     formatPnl($(".tradeHistory_pnl"), totalPnl, "$", 2);
-  };
+  }
 
   $('.tradeHistory_nbTrades').text(rowsFull.length);
 
@@ -2267,8 +2347,8 @@ function handleOrderUpdate(r) {
   if (!isFinite(qty) || !isFinite(price) || qty <= 0) return;
 
   // 2) Conversion quote -> USDC pour maintenir un coût moyen en USDC
-  const rate = getQuoteToUSDC(quote) ?? 0;
-  if (!(rate > 0)) return; // pas de conversion disponible, on attendra le prochain tick
+  const rate = getQuoteToUSDC(quote);
+  if (!(rate > 0)) return;
 
   const pos = (positions[asset] = positions[asset] || { qty: 0, cost: 0 });
   const QTY_EPS = 1e-12, DUST_USDC = 1;
@@ -2494,7 +2574,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.0</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.1</span>'
     )
   );
 
@@ -2535,7 +2615,7 @@ async function pnl() {
         isLogged = true;
         api_save(API);
 
-        $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
+        $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
 
         closeBlurPage();
         getDataAndDisplay();
@@ -2575,7 +2655,7 @@ async function pnl() {
 
         // <<< IMPORTANT : remettre l'état OK visuellement
         $(".detail_connect").css("display", "none").text("CONNECT TO API");
-        bottomNotification("connected");
+        bottomNotification("reconected");
       } catch (e) {
         // Erreurs réelles seulement (réseau, 5xx, auth). Les symboles invalides sont filtrés en amont.
         console.error("Re-init on visibility failed:", e);
@@ -2765,7 +2845,7 @@ async function pnl() {
 
   // UTILITY
 
-  if (isMobile && false) {
+  if(isMobile && false) {
     $("#IOSbackerUI").css("display", "block");
 
     $(document).on("touchstart", backerMousedownHandler);
@@ -2775,7 +2855,7 @@ async function pnl() {
     $("#IOSbackerUI").on("backed", function () {
       goBack();
     });
-  } else {
+  }else{
     $("#IOSbackerUI").remove();
   }
 
@@ -2811,8 +2891,15 @@ async function pnl() {
   });
 
   $(".minifier").on("click", function () {
-    $(this).text(!allminified ? "<>" : "-");
-    $(this).css("fontSize", !allminified ? "14px" : "18px");
+    $(this).find('.minifier_icon').attr("src", allminified ? 
+      "./resources/imgs/out.svg" : 
+      "./resources/imgs/in.svg"
+    );
+
+    $(this).find('.minifier_icon').css({
+      height: allminified ? "17px" : "16px",
+      width: allminified ? "17px" : "16px"
+    });
 
     $(".detail_elem").each((_, elem) => {
       minifyTileHandler(elem, !allminified);
@@ -2890,7 +2977,7 @@ async function pnl() {
     $("#api_key-val").val(API.API);
     $("#api_secret-val").val(API.SECRET);
 
-    $(".detail_elem_wrapper, .minifier").css("pointer-events", "none");
+    $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
 
     getDataAndDisplay(false);
   } else {
