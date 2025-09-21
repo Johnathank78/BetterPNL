@@ -147,15 +147,15 @@
                 <div class="simulator_thirdLine">
                     <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">PRICE</span>
-                        <input type="numeric" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="sellPrice">
                         <span class="currencyPlaceholder">$</span>
                         <span id="actualPrice" class="noselect">ACTUAL</span>
                     </div>
 
                     <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">PROFIT</span>
-                        <input type="number" lang="en" step="any" autocomplete="off" pattern="^[+\-]?\d*(?:[.,]\d*)?$" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" id="aimedProfit">
-                        <span class="dollaSignPlaceholder">$</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" value="50" id="aimedProfit">
+                        <span class="dollaSignPlaceholder" id="dollaSignAimed">$</span>
                         <span id="zero" class="noselect">ZERO</span>
                     </div>
                 </div>
@@ -163,21 +163,21 @@
                 <div class="simulator_forthLine" style="display: none;">
                     <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">QUANTITY</span>
-                        <input type="numeric" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="buyQuantity">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="1800" id="buyQuantity">
                         <span id="putMaxInvest" class="noselect">MAX</span>
                         <span class="currencyPlaceholder">$</span>
                     </div>
 
                     <div class="blurItem_element_row">
                         <span class="blurItem_element_text noselect">PRICE</span>
-                        <input type="numeric" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" id="buyPrice">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" id="buyPrice">
                         <span id="currentPrice" class="noselect">ACTUAL</span>
                         <span class="currencyPlaceholder">$</span>
                     </div>
 
                     <div class="blurItem_element_row lastRow">
                         <span class="blurItem_element_text noselect">MEAN BUY</span>
-                        <input type="numeric" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" id="meanBuy">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input blurItem_element_input_wide" placeholder="50" id="meanBuy">
                         <span class="currencyPlaceholder">$</span>
                     </div>
                 </div>
@@ -213,7 +213,7 @@
                 <div class="global_elem bank">
                     <div class="global_elem_scrollable">
                         <div class="global_elem_wrapper">
-                            <span class="elem_title bold">BANKTEST</span>
+                            <span class="elem_title bold">BANK</span>
                             <span class="elem_data bank_data">0.00 <span class="currency">$</span></span>
                         </div>
     
