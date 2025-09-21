@@ -71,6 +71,41 @@ const PUMP_CRASH_CONFIG = {
 let pumpCrashHistory = [];   // historique {time, bank}
 let lastPumpCrashNotif = 0;  // timestamp dernière notif
 
+const stepsSchemes = {
+  global: [
+    { cap: 10,       decimals: 3, short: false },
+    { cap: 10000,    decimals: 2, short: false },
+    { cap: Infinity, decimals: 3, short: true } 
+  ],
+
+  positionPrice: [
+    { cap: 10,       decimals: 3, short: false },
+    { cap: 1000,     decimals: 2, short: false },
+    { cap: Infinity, decimals: 3, short: true } 
+  ],
+
+  positionData: [
+    { cap: 10,       decimals: 3, short: false },
+    { cap: 10000,    decimals: 2, short: false },
+    { cap: Infinity, decimals: 3, short: true } 
+  ],
+
+  tradeData : [
+    { cap: 10,        decimals: 3, short: false },
+    { cap: 10000,     decimals: 2, short: false },
+    { cap: 100000,    decimals: 1, short: false },
+    { cap: Infinity,  decimals: 3, short: true } 
+  ],
+
+  simulatorData: [
+    { cap: 1,        decimals: 4, short: false },
+    { cap: 10,       decimals: 3, short: false },
+    { cap: 1000,     decimals: 2, short: false },
+    { cap: 10000,    decimals: 2, short: false },
+    { cap: Infinity, decimals: 0, short: false } 
+  ]
+}
+
 // ------------------------------------------------------
 // 1) STORAGE & PARAMS
 // ------------------------------------------------------
@@ -271,163 +306,151 @@ function cloneOBJ(o) {
   return JSON.parse(JSON.stringify(o));
 }
 
-function fixNumber(n, fix, expand = false) {
-  n = parseFloat(n);
-  if (expand) {
-    fix = Math.abs(n) >= expand.limit ? fix : fix + expand.val;
-  }
-  let f = n.toFixed(fix);
-  return Math.abs(Math.floor(f)) == Math.abs(Math.ceil(f)) ? n.toFixed(2) : f;
-}
-
-function fixNumberBis(n, fix) {
-  n = parseFloat(n);
-  if (isNaN(n)) return "NaN";
-  const [i, d = ""] = Math.abs(n).toString().split(".");
-  const dec = Math.max(0, fix - i.length);
-  let r = Math.abs(n).toFixed(dec);
-  if (dec > 0) {
-    const [, rd = ""] = r.split(".");
-    r += "0".repeat(dec - rd.length);
-  }
-  return n < 0 ? "-" + r : r;
-}
-
-function fixNumberTEST(input, opts = {}) {
-  let x = Number(input);
-  if (!isFinite(x)) return String(x); // NaN, Infinity…
+// fixNumber v5 — steps optionnels, "mode" implicite par présence de 'decimals' ou 'maxChars'
+function fixNumber(input, opts = {}) {
+  const x = Number(input);
+  if (!isFinite(x)) return String(x);
 
   const {
-    digits = 6,
-    short = false,
-    pad = false,
-    minDecimals = 0,
-    maxDecimals = 12,
-    rounding = "round",
-    decimalSeparator = ".",
-    showSign = false,
-    scales = "finance",
+    // Globaux par défaut si tu n'utilises PAS steps (ou si un step ne redéfinit pas)
+    short = false,                 // peut être surchargé par step.short
+    scales = "finance",            // "finance" | "metric" | Array<[value, suffix]>
+    rounding = "round",            // "round" | "floor" | "ceil" | "trunc"
+    decimalSeparator = ".",        // "." ou ","
+    showSign = false,              // true => "+123"
     unit = "",
-    scientificBelow = 0, // ex: 1e-9 pour afficher "1.23e-10"
+    // Utilisation SANS steps (profil direct)
+    decimals,                      // si défini → mode "décimales fixes"
+    maxChars,                      // sinon si défini → mode "longueur max" (core)
+    // Steps (optionnel)
+    steps
   } = opts;
 
-  const sign = x < 0 ? "-" : (showSign && x > 0 ? "+" : "");
-  let abs = Math.abs(x);
+  const abs = Math.abs(x);
+  const baseDS = decimalSeparator || ".";
+  const baseScaleTable = Array.isArray(scales)
+    ? scales
+    : (scales === "metric"
+        ? [[1e24,'Y'],[1e21,'Z'],[1e18,'E'],[1e15,'P'],[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k']]
+        : [[1e15,'P'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']]); // finance
 
-  // Zéro: géré à part pour éviter log10(0)
-  if (abs === 0) {
-    // si pad: on force exactement digits significatifs → "0" + (digits-1) zéros
-    // sinon: on respecte minDecimals / maxDecimals
-    const decIfPad = Math.max(0, Math.min(maxDecimals, Math.max(minDecimals, digits - 1)));
-    const dec = pad ? decIfPad : Math.max(minDecimals, 0);
-    let s = "0";
-    if (dec > 0) s += "." + "0".repeat(dec);
-    if (decimalSeparator !== ".") s = s.replace(".", decimalSeparator);
-    return sign + s + unit;
-  }
-
-  // Choix des suffixes
-  let SCALE_TABLE;
-  if (Array.isArray(scales)) {
-    SCALE_TABLE = scales;
-  } else if (scales === "metric") {
-    SCALE_TABLE = [[1e24,'Y'],[1e21,'Z'],[1e18,'E'],[1e15,'P'],[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k']];
-  } else { // "finance" (par défaut)
-    SCALE_TABLE = [[1e15,'P'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']];
-  }
-
-  // Utilitaires d’arrondi
-  const roundTo = (val, dec) => {
+  const roundTo = (val, dec, how) => {
     const f = Math.pow(10, dec);
-    switch (rounding) {
+    switch (how) {
       case "floor": return Math.floor(val * f) / f;
       case "ceil":  return Math.ceil(val * f) / f;
       case "trunc": return Math.trunc(val * f) / f;
-      default:      return Math.round(val * f) / f; // "round"
+      default:      return Math.round(val * f) / f;
     }
   };
+  const intLen = (v) => (v === 0 ? 1 : Math.floor(Math.log10(Math.abs(v))) + 1);
 
-  const intDigits = (v) => (v >= 1 ? Math.floor(Math.log10(v)) + 1 : 1);
-  const leadingZerosAfterDecimal = (v) => {
-    // v in (0,1). Exemple v=0.00045 → log10(v) ≈ -3.346 → floor = -4 → z = -(-4) - 1 = 3
-    const e = Math.floor(Math.log10(v));
-    return -e - 1;
-  };
-
-  // 1) Éventuellement choisir une échelle/suffixe pour faire tenir 'digits'
-  let scale = 1, suffix = "";
-  if (short) {
-    // On cherche le PLUS GRAND suffixe tel que le nombre d’entiers de (abs/scale) <= digits
-    for (const [v, s] of SCALE_TABLE) {
-      if (abs >= v) {
-        const scaled = abs / v;
-        const id = intDigits(scaled);
-        if (id <= digits && scaled >= 1) {
-          scale = v; suffix = s; break;
-        }
-      }
-    }
-    // À défaut: prendre la plus grande échelle applicable (même si id > digits)
-    if (scale === 1) {
-      for (const [v, s] of SCALE_TABLE) {
-        if (abs >= v) { scale = v; suffix = s; break; }
-      }
-    }
+  // ---------- Sélection du profil (direct ou via steps)
+  let profile;
+  if (Array.isArray(steps) && steps.length) {
+    const ordered = [...steps].sort((a,b) => (a.cap ?? Infinity) - (b.cap ?? Infinity));
+    const step = ordered.find(s => abs < (s.cap ?? Infinity)) || ordered[ordered.length - 1];
+    profile = {
+      rounding: step.rounding ?? rounding,
+      ds: step.decimalSeparator ?? baseDS,
+      showSign: step.showSign ?? showSign,
+      unit: step.unit ?? unit,
+      short: step.short ?? short,                         // 👈 short par step
+      scaleTable: Array.isArray(step.scales)
+        ? step.scales
+        : (step.scales ? (step.scales === "metric"
+              ? [[1e24,'Y'],[1e21,'Z'],[1e18,'E'],[1e15,'P'],[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k']]
+              : [[1e15,'P'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']])
+            : baseScaleTable),
+      decimals: (step.decimals != null) ? Math.max(0, step.decimals|0) : undefined,
+      maxChars: (Number.isInteger(step.maxChars) && step.maxChars > 0) ? step.maxChars : undefined
+    };
+  } else {
+    // pas de steps → profil direct
+    profile = {
+      rounding,
+      ds: baseDS,
+      showSign,
+      unit,
+      short,
+      scaleTable: baseScaleTable,
+      decimals: (decimals != null) ? Math.max(0, decimals|0) : undefined,
+      maxChars: (Number.isInteger(maxChars) && maxChars > 0) ? maxChars : undefined
+    };
   }
 
+  // ---------- Abréviation selon le profil (par step)
+  let scale = 1, suffix = "";
+  if (profile.short) {
+    for (const [v, s] of profile.scaleTable) {
+      if (abs >= v) { scale = v; suffix = s; break; }
+    }
+  }
   let val = abs / scale;
 
-  // 2) Calcul du nombre de décimales pour atteindre 'digits' significatifs
-  // Cas A: val >= 1 → décimales = digits - chiffres entiers
-  // Cas B: val  < 1 → il faut compter les zéros "avant" la 1ère décimale non-nulle
-  let dec;
-  if (val >= 1) {
-    const id = intDigits(val);
-    dec = Math.max(0, digits - id);
-  } else {
-    const zeros = leadingZerosAfterDecimal(val);
-    // ex: digits=4 et val=0.00045 → décimales = zeros + (digits - 1) = 3 + 3 = 6 → "0.000450"
-    dec = zeros + Math.max(0, digits - 1);
-  }
+  const build = (value, dec) => {
+    const y = roundTo(value, dec, profile.rounding);
+    const baseDot = dec > 0 ? y.toFixed(dec) : String(Math.round(y));
+    return profile.ds === "." ? baseDot : baseDot.replace(".", profile.ds);
+  };
 
-  // Bornes min/max décimales
-  dec = Math.max(minDecimals, Math.min(maxDecimals, dec));
-
-  // 3) Arrondi
-  let rounded = roundTo(val, dec);
-
-  // Arrondi qui fait "déborder" un chiffre (ex: 9.999 → 10.000) : on réajuste
-  if (rounded >= 1 && intDigits(rounded) > intDigits(val) && dec > 0) {
-    const newId = intDigits(rounded);
-    const targetDec = Math.max(minDecimals, Math.min(maxDecimals, Math.max(0, digits - newId)));
-    if (targetDec !== dec) {
-      dec = targetDec;
-      rounded = roundTo(val, dec);
+  // Zéro stable
+  if (abs === 0) {
+    if (profile.decimals != null) {
+      const core = profile.decimals > 0
+        ? ("0" + (profile.ds === "." ? "." : profile.ds) + "0".repeat(profile.decimals))
+        : "0";
+      const sgn = x < 0 ? "-" : (profile.showSign && x > 0 ? "+" : "");
+      return sgn + core + suffix + (profile.unit || "");
+    } else {
+      const sgn = x < 0 ? "-" : (profile.showSign && x > 0 ? "+" : "");
+      return sgn + "0" + suffix + (profile.unit || "");
     }
   }
 
-  // 4) Si sans abréviation on n’arrive toujours pas à respecter 'digits' (val très grande) :
-  //    fallback: scientifique si demandé.
-  if (!short && intDigits(rounded) > digits && scientificBelow > 0 && abs < scientificBelow) {
-    // notation scientifique avec digits significatifs
-    let sci = abs.toExponential(Math.max(0, digits - 1));
-    if (decimalSeparator !== ".") sci = sci.replace(".", decimalSeparator);
-    return sign + sci + unit;
-  }
-  // 5) Chaîne décimale de base en "." (on convertira le séparateur ensuite)
-  let base = dec > 0 ? rounded.toFixed(dec) : String(Math.round(rounded));
-
-  // 6) Si pad = false → on nettoie les zéros finaux mais on respecte minDecimals
-  if (!pad && dec > 0) {
-    const [ip, dp = ""] = base.split(".");
-    let dpTrim = dp.replace(/0+$/, "");
-    if (dpTrim.length < minDecimals) dpTrim = dp.slice(0, Math.min(dp.length, minDecimals));
-    base = dpTrim.length ? ip + "." + dpTrim : ip;
+  // Mode implicite: decimals prioritaire
+  if (profile.decimals != null) {
+    const core = build(val, profile.decimals);
+    const sgn = x < 0 ? "-" : (profile.showSign && x > 0 ? "+" : "");
+    return sgn + core + suffix + (profile.unit || "");
   }
 
-  // 7) Appliquer séparateur décimal et composer le résultat final
-  if (decimalSeparator !== ".") base = base.replace(".", decimalSeparator);
-  return sign + base + suffix + unit;
+  // Sinon maxChars (si fourni)
+  if (profile.maxChars != null) {
+    // point de départ pour décimales (réduction possible)
+    let d = 6;
+
+    // si entiers trop longs, tenter d’augmenter l’abréviation si possible
+    const fitScaleIfNeeded = () => {
+      const ilen = intLen(val);
+      if (ilen <= profile.maxChars) return;
+      if (!profile.short) return;
+      for (const [v, s] of profile.scaleTable) {
+        if (v <= scale) continue;
+        if (abs < v) continue;
+        const testVal = abs / v;
+        if (intLen(testVal) <= profile.maxChars) {
+          scale = v; suffix = s; val = testVal;
+          break;
+        }
+      }
+    };
+    fitScaleIfNeeded();
+
+    let core = build(val, d);
+    while (core.length > profile.maxChars && d > 0) {
+      d -= 1;
+      core = build(val, d);
+    }
+
+    const sgn = x < 0 ? "-" : (profile.showSign && x > 0 ? "+" : "");
+    return sgn + core + suffix + (profile.unit || "");
+  }
+
+  // Fallback: 2 décimales fixes
+  const core = build(val, 2);
+  const sgn = x < 0 ? "-" : (profile.showSign && x > 0 ? "+" : "");
+  return sgn + core + suffix + (profile.unit || "");
 }
 
 function isNacN(input) {
@@ -916,14 +939,11 @@ function displayNewData(walletData) {
 
 function updateGlobalElements(walletData, initialDeposit, availableBank) {
   /* ── tiny helpers ────────────────────────────────────────── */
-  const fmt = (n, symbol = "$") =>
-    `${fixNumber(n, 2, {
-      limit: 2,
-      val: 2,
+  const fmt = (n, showSign, symbol = "$") =>
+    `${fixNumber(n, {
+      showSign: showSign,
+      steps: stepsSchemes.global
     })} <span class="currency">${symbol}</span>`;
-
-  const fmtSigned = (n, symbol) =>
-    `${n >= 0 ? "+" : "-"}${fmt(Math.abs(n), symbol)}`;
 
   const colorFor = (n) =>
     n > 0 ? "var(--green)" : n < 0 ? "var(--red)" : "var(--gray)";
@@ -931,13 +951,13 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
   const ERR = { html: "ERROR", color: "var(--red)" };
 
   /* ── 1) Total portfolio value (USDC) ─────────────────────── */
-  const bankHTML = fmt(walletData.global.bank);
+  const bankHTML = fmt(walletData.global.bank, false);
 
   /* ── 2) Available USDC (wallet - reserved) ──────────────── */
   const avail =
     availableBank === "ERROR"
       ? ERR
-      : { html: fmt(availableBank), color: "white" };
+      : { html: fmt(availableBank, false), color: "white" };
 
   /* ── 3) All-time PnL vs initial deposit ─────────────────── */
   const allPnl =
@@ -950,7 +970,7 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
 
           if (isNaN(delta)) return ERR;
           return {
-            html: fmtSigned(delta, params.isPercentage ? "%" : "$"),
+            html: fmt(delta, true, params.isPercentage ? "%" : "$"),
             color: colorFor(delta),
           };
         })();
@@ -967,7 +987,7 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
 
     if (isNaN(raw)) return ERR;
     return {
-      html: fmtSigned(raw, params.isPercentage ? "%" : "$"),
+      html: fmt(raw, true, params.isPercentage ? "%" : "$"),
       color: colorFor(raw),
     };
   })();
@@ -1006,9 +1026,14 @@ function generateAndPushTile(coin) {
   const symbol = isPct ? "%" : "$";
   const sign = pnl >= 0 ? "+" : "-";
   const pnlAbs = Math.abs(pnl);
+
   const formattedPnl = isPct
-    ? fixNumberTEST((pnlAbs / Number(coin.buy_value || 1)) * 100, { digits: 5, maxDecimals: 2, pad: true })
-    : fixNumberTEST(pnlAbs, { digits: 5, maxDecimals: 2, pad: true });
+    ? fixNumber((pnlAbs / Number(coin.buy_value || 1)) * 100, {
+      steps: stepsSchemes.positionData
+    })
+    : fixNumber(pnlAbs, {
+      steps: stepsSchemes.positionData
+    });
 
   const pnlColor = pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
   const currency = (stableCoins[coin.quoteCurrency] && stableCoins[coin.quoteCurrency].short) || coin.quoteCurrency || "";
@@ -1061,15 +1086,20 @@ function generateAndPushTile(coin) {
   }
 
   // ── Helpers format
-  const fmtPrice = v => fixNumberTEST(v, { digits: 5, pad: true, short: true });
-  const fmt      = v => fixNumberTEST(v, { digits: 5, pad: true });
+  const fmtPrice = v => fixNumber(v, {
+      steps: stepsSchemes.positionPrice
+    });
+
+  const fmt      = v => fixNumber(v, {
+      steps: stepsSchemes.positionData
+    });
 
   // ── Mise à jour des champs (unique code path)
   const minified = !!$tile.data("minified");
 
   $tile.find(".detail_elem_name").text(coin.asset);
   $tile.find(".detail_elem_amount").text(
-    !minified ? `${fixNumberBis(coin.amount, 10)} | ${prop}%` : `${prop}% | `
+    !minified ? `${fixNumber(coin.amount, { maxChars: 10 })} | ${prop}%` : `${prop}% | `
   );
 
   $tile.find(".detail_elem_price").text(`${fmtPrice(coin.price)} ${currency}`);
@@ -1255,7 +1285,7 @@ function minifyTile(elem, coin, minify, animate) {
             .find(".detail_elem_amount")
             .text(
               !minify
-                ? fixNumberBis(coin.amount, 10) + " | " + prop + "%"
+                ? fixNumber(coin.amount, { maxChars: 10 }) + " | " + prop + "%"
                 : prop + "% | "
             );
 
@@ -1289,7 +1319,7 @@ function minifyTile(elem, coin, minify, animate) {
             .find(".detail_elem_amount")
             .text(
               !minify
-                ? fixNumberBis(coin.amount, 10) + " | " + prop + "%"
+                ? fixNumber(coin.amount, { maxChars: 10 }) + " | " + prop + "%"
                 : prop + "% | "
             );
 
@@ -1765,14 +1795,16 @@ function toUIRows(groups) {
 function formatPnl(
   item,
   pnl,
-  symbol,
-  fix = 2
+  symbol
 ) {
-  const sign = pnl >= 0 ? "+" : "-";
   const pnlColor =
     pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
 
-  $(item).text(sign + fixNumber(Math.abs(pnl), fix) + " " + symbol);
+  $(item).text(fixNumber(Math.abs(pnl), {
+    showSign: true,
+    steps: stepsSchemes.positionData
+  }) + " " + symbol);
+
   $(item).css("color", pnlColor);
 }
 
@@ -1783,10 +1815,10 @@ function generateNpushTradeTile(data) {
       <div class="tradeHistory_item_header">
           <div class="tradeHistory_item_headerFirstLine">
               <div class="tradeHistory_item_headerFirstLine_leftPart">
-                  <span class="tradeHistory_item_currLabel">ETH</span>
-                  <span class="tradeHistory_item_currAmount">0.2552</span>
+                  <span class="tradeHistory_item_currLabel"></span>
+                  <span class="tradeHistory_item_currAmount"></span>
               </div>
-              <span class="tradeHistory_item_date">2025-08-27 07:15:18</span>
+              <span class="tradeHistory_item_date"></span>
           </div>
           <div class="tradeHistory_item_headerSecondLine">
               <span class="tradeHistory_item_side">BUY</span>
@@ -1795,19 +1827,19 @@ function generateNpushTradeTile(data) {
       <div class="tradeHistory_item_body">
           <div class="tradeHistory_item_lineWrapper">
               <span class="tradeHistory_item_lineLabel">PRICE</span>
-              <span class="tradeHistory_item_lineValue price_line">2.504 $</span>
+              <span class="tradeHistory_item_lineValue price_line"></span>
           </div>
           <div class="tradeHistory_item_lineWrapper">
               <span class="tradeHistory_item_lineLabel">AMOUNT</span>
-              <span class="tradeHistory_item_lineValue amount_value">250.4 $</span>
+              <span class="tradeHistory_item_lineValue amount_value"></span>
           </div>
           <div class="tradeHistory_item_lineWrapper">
               <span class="tradeHistory_item_lineLabel">FEES</span>
-              <span class="tradeHistory_item_lineValue fees_line">0.250 $</span>
+              <span class="tradeHistory_item_lineValue fees_line"></span>
           </div>
           <div class="tradeHistory_item_lineWrapper">
               <span class="tradeHistory_item_lineLabel">PNL</span>
-              <span class="tradeHistory_item_lineValue pnl_line">+350 $</span>
+              <span class="tradeHistory_item_lineValue pnl_line"></span>
           </div>
       </div>
     </div>
@@ -1816,24 +1848,26 @@ function generateNpushTradeTile(data) {
   $(item).find(".tradeHistory_item_currLabel").text(data.base);
   $(item)
     .find(".tradeHistory_item_currAmount")
-    .text(fixNumberTEST(data.amountToken, {
-      digits: 5
+    .text(fixNumber(data.amountToken, {
+      steps: stepsSchemes.tradeData
     }));
   $(item).find(".tradeHistory_item_date").text(formatTimestamp(data.time));
 
   $(item)
     .find(".price_line")
-    .text(fixNumberTEST(data.priceUSDC, {
-      digits: 5,
-      maxDecimals: 4,
-      pad: true
+    .text(fixNumber(data.priceUSDC, {
+      steps: stepsSchemes.tradeData
     }) + " $");
   $(item)
     .find(".amount_value")
-    .text(fixNumber(data.amountUSDC, 2) + " $");
+    .text(fixNumber(data.amountUSDC, {
+      steps: stepsSchemes.tradeData
+    }) + " $");
   $(item)
     .find(".fees_line")
-    .text(fixNumber(data.feeUSDC, 2) + " $");
+    .text(fixNumber(data.feeUSDC, {
+      steps: stepsSchemes.tradeData
+    }) + " $");
 
   if (data.side == "BUY") {
     $(item).find(".tradeHistory_item_side").text("BUY");
@@ -1972,29 +2006,30 @@ function loadSimulatorData(mode) {
   let short = stableCoin.short;
 
   $(".simulator_meanBuy").text(
-    fixNumber(coin.mean_buy, 2, { limit: 10, val: 2 }) + short
+    fixNumber(coin.mean_buy, {
+      steps: stepsSchemes.simulatorData
+    }) + " " + short
   );
 
   if (mode == "buy") {
     $(".simulator_buyQuant").text(
-      fixNumber(
-        parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate),
-        2,
-        { limit: 10, val: 2 }
-      ) + short
+      fixNumber(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate), 
+        { digits: 2, dynamicDecimals: { limit: 10, extra: 2 } }
+      )+ " " + + short
     );
   } else if (mode == "sell") {
     $(".simulator_buyQuant").text(
-      fixNumber(coin.buy_value, 2, { limit: 10, val: 2 }) + "$"
+      fixNumber(coin.buy_value, 
+        { digits: 2, dynamicDecimals: { limit: 10, extra: 2 } }
+      ) + "$"
     );
   }
 
   $(".currencyPlaceholder").text(short);
   $("#coin_selector").val(focusedCoin);
 
-  let placeholderSellPrice = fixNumber(coin.mean_buy * 1.05, 2, {
-    limit: 10,
-    val: 2,
+  let placeholderSellPrice = fixNumber(coin.mean_buy * 1.05, {
+    steps: stepsSchemes.simulatorData
   });
 
   $("#sellPrice").attr("placeholder", placeholderSellPrice);
@@ -2003,15 +2038,13 @@ function loadSimulatorData(mode) {
     aimedProfitUpdate(placeholderSellPrice)
   );
 
-  let placeholderMeanBuyPrice = fixNumber(coin.mean_buy * 0.85, 2, {
-    limit: 10,
-    val: 2,
+  let placeholderMeanBuyPrice = fixNumber(coin.mean_buy * 0.85, {
+    steps: stepsSchemes.simulatorData
   });
-  let pastQuantity = fixNumber(
-    parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate),
-    2,
-    { limit: 10, val: 2 }
-  );
+
+  let pastQuantity = fixNumber(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate), {
+    steps: stepsSchemes.simulatorData
+  });
 
   $("#buyQuantity").attr("placeholder", pastQuantity);
   $("#meanBuy").attr("placeholder", placeholderMeanBuyPrice);
@@ -2110,7 +2143,10 @@ function aimedProfitUpdate(sellPrice) {
     ((sellPrice * conversionRate - buyPrice * conversionRate) /
       (buyPrice * conversionRate)) *
     amount;
-  return fixNumber(profit, 2, { limit: 10, val: 2 });
+
+  return fixNumber(profit, {
+    steps: stepsSchemes.simulatorData
+  });
 }
 
 function sellPriceUpdate(profit) {
@@ -2130,7 +2166,10 @@ function sellPriceUpdate(profit) {
     ((amount * buyPrice) / conversionRate + profit) /
     (amount / conversionRate) /
     (1 - takerFEE);
-  return fixNumber(sellPrice, 2, { limit: 10, val: 2 });
+
+  return fixNumber(sellPrice, {
+    steps: stepsSchemes.simulatorData
+  });
 }
 
 // --- BUY --- //
@@ -2160,7 +2199,10 @@ function priceUpdate(mean_buy, quantity) {
 
   let newPrice =
     (mean_buy * (pastQuantity + quantity) - pastTotalCost) / quantity;
-  return fixNumber(newPrice, 2, { limit: 10, val: 2 });
+
+  return fixNumber(newPrice, {
+    steps: stepsSchemes.simulatorData
+  });
 }
 
 function meanBuyUpdate(price, quantity) {
@@ -2179,9 +2221,11 @@ function meanBuyUpdate(price, quantity) {
 
   let pastAmount = pastQuantity * parseFloat(coin.mean_buy);
   let currentAmount = quantity * price;
-
   let meanBuy = (pastAmount + currentAmount) / (pastQuantity + quantity);
-  return fixNumber(meanBuy, 2, { limit: 10, val: 2 });
+  
+  return fixNumber(meanBuy, {
+    steps: stepsSchemes.simulatorData
+  });
 }
 
 // ------------------------------------------------------
@@ -2574,7 +2618,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.3</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.4</span>'
     )
   );
 
@@ -2767,13 +2811,15 @@ async function pnl() {
       walletData.coins[
         getObjectKeyIndex(walletData.coins, "asset", focusedCoin)
       ];
-    let availableCurr = fixNumber(findAvailableFunds(coin.quoteCurrency), 2, {
-      limit: 10,
-      val: 2,
+    let availableCurr = fixNumber(findAvailableFunds(coin.quoteCurrency), {
+      steps: stepsSchemes.simulatorData
     });
+
     let maxSafe = availableFunds == "ERROR" ? availableCurr : availableFunds;
 
-    let funds = fixNumber(maxSafe, 2, { limit: 10, val: 2 });
+    let funds = fixNumber(maxSafe, {
+      steps: stepsSchemes.simulatorData
+    });
 
     $("#buyQuantity").val(funds);
     $("#buyQuantity").change();
@@ -2784,7 +2830,10 @@ async function pnl() {
       walletData.coins[
         getObjectKeyIndex(walletData.coins, "asset", focusedCoin)
       ];
-    let price = fixNumber(coin.price, 2, { limit: 10, val: 2 });
+
+    let price = fixNumber(coin.price, {
+      steps: stepsSchemes.simulatorData
+    });
 
     $("#sellPrice").val(price);
     $("#sellPrice").change();
@@ -2859,29 +2908,54 @@ async function pnl() {
     $("#IOSbackerUI").remove();
   }
 
+  // Replace the existing strictlyFloatable keydown with this:
   $(document).on("keydown", ".strictlyFloatable", function (e) {
-    let allowedKeys = [
-      ..."0123456789.,",
-      "Backspace",
-      "ArrowLeft",
-      "ArrowRight",
-      "Delete",
-      "Tab",
-    ];
+    const el = this;
+    const val = el.value;
+    const allowSign =
+      el.dataset.allowSign === "true" || $(el).is("#aimedProfit"); // sign only where flagged
+    const hasDot  = val.includes(".");
+    const hasSign = /^[+\-]/.test(val);
 
-    if ((e.key === "," || e.key === ".") && !$(this).val().includes(".")) {
+    const NAV_KEYS = new Set(["Backspace","ArrowLeft","ArrowRight","Delete","Tab"]);
+
+    // Normalize comma to dot; allow only one decimal separator
+    if (e.key === "," || e.key === ".") {
       e.preventDefault();
-      $(this).val($(this).val() + ".");
-    } else if (
-      (e.key === "," || e.key === ".") &&
-      $(this).val().includes(".")
-    ) {
-      e.preventDefault();
+      if (!hasDot) {
+        const start = el.selectionStart ?? val.length;
+        const end   = el.selectionEnd ?? val.length;
+        el.value = val.slice(0, start) + "." + val.slice(end);
+        el.setSelectionRange(start + 1, start + 1);
+        $(el).trigger("input");
+      }
+      return;
     }
 
-    if (!allowedKeys.includes(e.key)) {
+    // Optional leading sign
+    if (allowSign && (e.key === "-" || e.key === "+")) {
+      const start = el.selectionStart ?? 0;
+      // Allow only at position 0, and only one sign
+      if (!hasSign && start === 0) {
+        return; // let it through
+      }
+      // If a sign already exists at start, replace it
+      if (start === 0 && hasSign) {
+        e.preventDefault();
+        el.value = e.key + val.replace(/^[+\-]/, "");
+        el.setSelectionRange(1, 1);
+        $(el).trigger("input");
+        return;
+      }
       e.preventDefault();
+      return;
     }
+
+    // Digits always OK; navigation keys OK
+    if (/^\d$/.test(e.key) || NAV_KEYS.has(e.key)) return;
+
+    // Block everything else
+    e.preventDefault();
   });
 
   $(document).on("click", NotificationGrantMouseDownHandler);
