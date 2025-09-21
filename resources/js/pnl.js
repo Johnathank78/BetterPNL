@@ -2625,7 +2625,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.5</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.6</span>'
     )
   );
 
@@ -3076,8 +3076,6 @@ async function pnl() {
   } else {
     initDOMupdate(false);
   }
-
-  showBlurPage('simulator_wrapper');
 }
 
 $(document).ready(pnl);
