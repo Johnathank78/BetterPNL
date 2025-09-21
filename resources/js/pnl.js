@@ -1210,10 +1210,17 @@ function fetchStyleUpdate(fetching, refresh = false) {
       );
     }
 
-    $(".refresh_container").css("opacity", ".3");
+    $(".refresh_container").css({
+      opacity: ".3",
+      pointerEvents: "none",
+    });
+    $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
   } else {
     $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "all");
-    $(".refresh_container").css("opacity", "1");
+    $(".refresh_container").css({
+      opacity: "1",
+      pointerEvents: "all",
+    });
     $(".skeleton").removeClass("skeleton");
   }
 }
@@ -2681,33 +2688,33 @@ async function pnl() {
     }
   });
 
-  document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "hidden") {
-      if (priceWs) priceWs.close();
-      if (userWs) userWs.close();
-    } else if (document.visibilityState === "visible") {
-      try {
-        if (initialDeposit == "ERROR" || availableFunds == "ERROR") {
-          $(".all_pnl_data, .available_data").addClass("skeleton");
-          firstLog = true;
-        }
+  // document.addEventListener("visibilitychange", async () => {
+  //   if (document.visibilityState === "hidden") {
+  //     if (priceWs) priceWs.close();
+  //     if (userWs) userWs.close();
+  //   } else if (document.visibilityState === "visible") {
+  //     try {
+  //       if (initialDeposit == "ERROR" || availableFunds == "ERROR") {
+  //         $(".all_pnl_data, .available_data").addClass("skeleton");
+  //         firstLog = true;
+  //       }
 
-        await initRealTime(API.API, API.SECRET, (asset, price) => {
-          coinPrices[asset] = price;
-          recomputePortfolio();
-        });
+  //       await initRealTime(API.API, API.SECRET, (asset, price) => {
+  //         coinPrices[asset] = price;
+  //         recomputePortfolio();
+  //       });
 
-        // <<< IMPORTANT : remettre l'état OK visuellement
-        $(".detail_connect").css("display", "none").text("CONNECT TO API");
-        bottomNotification("reconected");
-      } catch (e) {
-        // Erreurs réelles seulement (réseau, 5xx, auth). Les symboles invalides sont filtrés en amont.
-        console.error("Re-init on visibility failed:", e);
-        bottomNotification("fetchError");
-        clearData("error");
-      }
-    }
-  });
+  //       // <<< IMPORTANT : remettre l'état OK visuellement
+  //       $(".detail_connect").css("display", "none").text("CONNECT TO API");
+  //       bottomNotification("reconected");
+  //     } catch (e) {
+  //       // Erreurs réelles seulement (réseau, 5xx, auth). Les symboles invalides sont filtrés en amont.
+  //       console.error("Re-init on visibility failed:", e);
+  //       bottomNotification("fetchError");
+  //       clearData("error");
+  //     }
+  //   }
+  // });
 
 
   // FILTERS & FETCHING
@@ -2837,6 +2844,18 @@ async function pnl() {
 
     $("#sellPrice").val(price);
     $("#sellPrice").change();
+  });
+
+  $('#dollaSignAimed').on('click', function() {
+    let val = $("#aimedProfit").val();
+
+    if (val.startsWith("+")) {
+      $("#aimedProfit").val("-" + val.slice(1));
+    } else if (val.startsWith("-")) {
+      $("#aimedProfit").val("+" + val.slice(1));
+    } else {
+      $("#aimedProfit").val("+" + val);
+    }
   });
 
   $("#zero").on("click", function () {
@@ -3043,20 +3062,22 @@ async function pnl() {
 
   // INIT
 
-  API = api_read();
-  params = params_read();
-  oldWalletData = old_read();
+  // API = api_read();
+  // params = params_read();
+  // oldWalletData = old_read();
 
-  if (isLogged) {
-    $("#api_key-val").val(API.API);
-    $("#api_secret-val").val(API.SECRET);
+  // if (isLogged) {
+  //   $("#api_key-val").val(API.API);
+  //   $("#api_secret-val").val(API.SECRET);
 
-    $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
+  //   $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
 
-    getDataAndDisplay(false);
-  } else {
-    initDOMupdate(false);
-  }
+  //   getDataAndDisplay(false);
+  // } else {
+  //   initDOMupdate(false);
+  // }
+
+  showBlurPage('simulator_wrapper');
 }
 
 $(document).ready(pnl);
