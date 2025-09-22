@@ -672,7 +672,7 @@ body{
     color: white;
     
     font-weight: 500;
-    font-size: 14px;
+    font-size: 15px;
 
     border-radius: 8px;
     border: none;
@@ -680,7 +680,7 @@ body{
 }
 
 .detail_select > option{
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
 }
 

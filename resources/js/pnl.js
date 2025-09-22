@@ -50,6 +50,7 @@ var initialDeposit = 0,
 var userWsKeepAliveId = null;
 
 var positions = {};
+var OPEN_ORDERS = {}; // key = orderId, value = ordre complet
 
 walletData = { coins: [], global: { bank: 0, pnl: 0 } };
 coinPrices = coinPrices || {};
@@ -455,7 +456,7 @@ function fixNumber(input, opts = {}) {
 
 function isNacN(input) {
   if (typeof input === "number") input = input.toString();
-  return !/^-?\d*\.?\d+$/.test(input);
+  return !/^[-+]?\d*\.?\d+$/.test(input);
 }
 
 function getObjectKeyIndex(obj, key, val) {
@@ -745,39 +746,17 @@ async function getFiatDeposit(apiKey, apiSecret) {
   return sum_deposit + sum_deposit2 - sum_withdraw;
 }
 
-async function getReservedFundsUSDC(apiKey, apiSecret) {
-  const recvWindow = 60000;
-  const ts = await binanceTs();
-  let qs = `timestamp=${ts}&recvWindow=${recvWindow}`;
-  const sig = await signHmacSha256(qs, apiSecret);
-  qs += `&signature=${sig}`;
+async function getReservedFundsUSDC() {
+  return Object.values(OPEN_ORDERS).reduce((sum, o) => {
+    if (o.S !== "BUY" || !["NEW", "PARTIALLY_FILLED"].includes(o.X)) return sum;
 
-  let orders;
-  try {
-    orders = await fetchJSON(`${WORKER_URL}/proxyOpenOrders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey, queryString: qs }),
-    });
-  } catch (error) {
-    throw error;
-  }
-
-  if (!Array.isArray(orders) || !orders.length) return 0;
-
-  return orders.reduce((sum, o) => {
-    if (o.side !== "BUY" || !["NEW", "PARTIALLY_FILLED"].includes(o.status))
-      return sum;
-    const remainingQty = parseFloat(o.origQty) - parseFloat(o.executedQty || 0);
-    const price = parseFloat(o.price || o.cummulativeQuoteQty / o.origQty);
+    const remainingQty = parseFloat(o.q) - parseFloat(o.z || 0); // q = origQty, z = executedQty
+    const price = parseFloat(o.p || (o.Z / o.q));                // p = price, Z = cummulativeQuoteQty
     if (!remainingQty || !price) return sum;
 
     let quote = null;
     for (const sc in stableCoins) {
-      if (o.symbol.endsWith(sc)) {
-        quote = sc;
-        break;
-      }
+      if (o.s.endsWith(sc)) { quote = sc; break; }
     }
     if (!quote) return sum;
 
@@ -2270,6 +2249,8 @@ function hasPair(base, quote) {
 }
 
 async function initRealTime(apiKey, apiSecret, onPrice) {
+  OPEN_ORDERS = {}; 
+
   const recvWindow = 60000;
 
   // 0) Prime conversions (inchangé)
@@ -2374,6 +2355,15 @@ function handleBalanceUpdate(upd) {
 }
 
 function handleOrderUpdate(r) {
+  // A) MAJ du cache OPEN_ORDERS ---
+  // r.X = status ("NEW", "PARTIALLY_FILLED", "FILLED", "CANCELED", "EXPIRED", etc.)
+
+  if (["NEW", "PARTIALLY_FILLED"].includes(r.X)) {
+    OPEN_ORDERS[r.i] = r;
+  } else {
+    delete OPEN_ORDERS[r.i];
+  }
+
   // 0) Si c'est un "fill" (executionReport de type TRADE), on ajoute au Trade Store
   if (r && r.x === "TRADE" && r.l !== "0") {
     trades_appendFromExecReport(r);
@@ -2446,19 +2436,18 @@ function clearMinify(coins) {
 
 function recomputePortfolio() {
   let coins = [],
-    bank = 0,
-    pnlSum = 0;
+      bank = 0,
+      pnlSum = 0;
 
   // 1) Construire le snapshot (en USDC)
   Object.entries(positions).forEach(([asset, pos]) => {
     if (asset.endsWith("USDC") && asset !== "USDC") return; // safety
     if (pos.qty * pos.cost <= 2 && !stableCoins.hasOwnProperty(asset)) {
-      bank += pos.qty * pos.cost; 
+      bank += pos.qty * pos.cost;
       return;
     };
 
     if (stableCoins.hasOwnProperty(asset)) {
-      // ⚠️ plus de fallback "1" : si conversion inconnue => 0 (on n'affiche pas encore)
       const conversionRate =
         stableCoins[asset].conversionRate || coinPrices[asset + "USDC"] || 0;
 
@@ -2467,9 +2456,9 @@ function recomputePortfolio() {
       coins.push({
         asset,
         amount: pos.qty,
-        price: conversionRate, // conversion -> USDC
+        price: conversionRate,
         actual_value: curVal,
-        buy_value: curVal, // pas de PnL sur stables
+        buy_value: curVal,
         mean_buy: conversionRate,
         ongoing_pnl: "+0",
         quoteCurrency: "USDC",
@@ -2477,8 +2466,8 @@ function recomputePortfolio() {
 
       bank += curVal;
     } else {
-      const price = coinPrices[asset + "USDC"] || 0; // 0 si pas encore coté
-      const buyVal = pos.qty * pos.cost; // coût moyen déjà en USDC
+      const price = coinPrices[asset + "USDC"] || 0;
+      const buyVal = pos.qty * pos.cost;
       const curVal = pos.qty * price;
       const pnl = curVal - buyVal;
 
@@ -2505,7 +2494,7 @@ function recomputePortfolio() {
 
   walletData = nextWallet;
 
-  // 2) NE RENDRE QUE SI tout est "pricé" (évite bank qui grimpe par étapes)
+  // 2) NE RENDRE QUE SI tout est "pricé"
   const allValidNow = (walletData.coins || []).every((c) => {
     if (stableCoins.hasOwnProperty(c.asset)) {
       const r =
@@ -2517,11 +2506,9 @@ function recomputePortfolio() {
     return Number.isFinite(c.price) && c.price > 0;
   });
 
-  // Persistance (seulement quand tout est validé)
   if (allValidNow) {
     try { old_save(walletData) } catch {}
 
-    // 3) Premier affichage "complet" : peindre puis retirer les skeletons
     if (firstLog) {
       clearMinify(walletData.coins);
       params_save(params);
@@ -2529,59 +2516,61 @@ function recomputePortfolio() {
 
       (async () => {
         try {
-          const [fiatDeposit, reservedFunds] = await Promise.all([
-            getFiatDeposit(API.API, API.SECRET),
-            getReservedFundsUSDC(API.API, API.SECRET),
-          ]);
-
+          // 🔹 uniquement le dépôt fiat
+          const fiatDeposit = await getFiatDeposit(API.API, API.SECRET);
           initialDeposit = fiatDeposit;
-
-          // Somme des stables convertis en USDC – ordres ouverts
-          const totalStableUSDC = Object.keys(stableCoins).reduce((sum, s) => {
-            const qty = positions[s]?.qty || 0;
-            const rate =
-              stableCoins[s].conversionRate ||
-              (s === "USDC" ? 1 : coinPrices[s + "USDC"] || 0);
-            return sum + qty * (Number.isFinite(rate) ? rate : 0);
-          }, 0);
-
-          availableFunds = totalStableUSDC - (reservedFunds || 0);
         } catch (err) {
           console.error("Initial funding check failed:", err);
           initialDeposit = "ERROR";
-          availableFunds = "ERROR";
         } finally {
-          // ➜ IMPORTANT : d’abord activer, puis peindre, puis nettoyer les dummies
           fullyLoaded = true;
           displayNewData(walletData);
-
           isApop(walletData, oldWalletData);
-
           removeDummy();
           fetchStyleUpdate(false);
-
-          fullyLoaded = true; // garde l’état
+          fullyLoaded = true;
         }
       })();
-      return; // on sort, l’IIFE a fait le rendu
+      return;
     }
 
-    // 4) Rendus suivants : peindre directement, sans toucher aux skeletons
+    // 3) Rendus suivants
     if (fullyLoaded) {
       displayNewData(walletData);
-    }
 
-    // LIVE pump/crash detection
-    const now = Date.now();
-    pumpCrashHistory.push({ time: now, pnl: pnlSum });
-    pumpCrashHistory = pumpCrashHistory.filter(p => now - p.time <= PUMP_CRASH_CONFIG.timeWindow);
+      // Détection pump/crash
+      const now = Date.now();
+      pumpCrashHistory.push({ time: now, pnl: pnlSum });
+      pumpCrashHistory = pumpCrashHistory.filter(
+        p => now - p.time <= PUMP_CRASH_CONFIG.timeWindow
+      );
 
-    if (pumpCrashHistory.length > 1) {
-      const first = pumpCrashHistory[0].pnl;
-      const last  = pumpCrashHistory[pumpCrashHistory.length - 1].pnl;
-      checkPumpCrash(first, last, coins);
+      if (pumpCrashHistory.length > 1) {
+        const first = pumpCrashHistory[0].pnl;
+        const last  = pumpCrashHistory[pumpCrashHistory.length - 1].pnl;
+        checkPumpCrash(first, last, coins);
+      }
     }
   }
+
+  // 4) MAJ des availableFunds à chaque recompute (live via WS)
+  (async () => {
+    try {
+      const reservedFunds = await getReservedFundsUSDC();
+      const totalStableUSDC = Object.keys(stableCoins).reduce((sum, s) => {
+        const qty = positions[s]?.qty || 0;
+        const rate =
+          stableCoins[s].conversionRate ||
+          (s === "USDC" ? 1 : coinPrices[s + "USDC"] || 0);
+        return sum + qty * (Number.isFinite(rate) ? rate : 0);
+      }, 0);
+  
+      availableFunds = totalStableUSDC - reservedFunds;
+    } catch (err) {
+      console.error("Reserved funds calc failed:", err);
+      availableFunds = "ERROR";
+    }
+  })();
 }
 
 // ------------------------------------------------------
@@ -2625,7 +2614,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.8</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.9</span>'
     )
   );
 
@@ -2715,7 +2704,6 @@ async function pnl() {
       }
     }
   });
-
 
   // FILTERS & FETCHING
 
@@ -2853,13 +2841,15 @@ async function pnl() {
     if (val.startsWith("+")) {
       newVal = "-" + val.slice(1)
     } else if (val.startsWith("-")) {
-      newVal = "+" + val.slice(1)
+      newVal = val.slice(1)
     } else {
       newVal = "-" + val
     }
 
     $("#aimedProfit").val(newVal);
     $("#sellPrice").val(sellPriceUpdate(newVal));
+    
+    simulatorStyleUpdate();
   });
 
   $("#zero").on("click", function () {
