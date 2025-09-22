@@ -2625,7 +2625,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.7</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.8</span>'
     )
   );
 
@@ -2848,16 +2848,18 @@ async function pnl() {
 
   $('#dollaSignAimed').on('click', function() {
     let val = $("#aimedProfit").val();
+    let newVal = null
 
     if (val.startsWith("+")) {
-      $("#aimedProfit").val("-" + val.slice(1));
+      newVal = "-" + val.slice(1)
     } else if (val.startsWith("-")) {
-      $("#aimedProfit").val("+" + val.slice(1));
+      newVal = "+" + val.slice(1)
     } else {
-      $("#aimedProfit").val("-" + val);
+      newVal = "-" + val
     }
 
-    $("#sellPrice").change();
+    $("#aimedProfit").val(newVal);
+    $("#sellPrice").val(sellPriceUpdate(newVal));
   });
 
   $("#zero").on("click", function () {
