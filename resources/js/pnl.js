@@ -1807,7 +1807,7 @@ function formatPnl(
   const pnlColor =
     pnl > 0 ? "var(--green)" : pnl < 0 ? "var(--red)" : "var(--gray)";
 
-  $(item).text(fixNumber(Math.abs(pnl), {
+  $(item).text(fixNumber(pnl, {
     showSign: true,
     steps: stepsSchemes.positionData
   }) + " " + symbol);
@@ -2625,7 +2625,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.6</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.7</span>'
     )
   );
 
@@ -2689,10 +2689,10 @@ async function pnl() {
   });
 
   document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "hidden") {
+    if (document.visibilityState === "hidden" && isLogged) {
       if (priceWs) priceWs.close();
       if (userWs) userWs.close();
-    } else if (document.visibilityState === "visible") {
+    } else if (document.visibilityState === "visible" && isLogged) {
       try {
         if (initialDeposit == "ERROR" || availableFunds == "ERROR") {
           $(".all_pnl_data, .available_data").addClass("skeleton");
@@ -2854,8 +2854,10 @@ async function pnl() {
     } else if (val.startsWith("-")) {
       $("#aimedProfit").val("+" + val.slice(1));
     } else {
-      $("#aimedProfit").val("+" + val);
+      $("#aimedProfit").val("-" + val);
     }
+
+    $("#sellPrice").change();
   });
 
   $("#zero").on("click", function () {
