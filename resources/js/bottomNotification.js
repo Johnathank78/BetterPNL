@@ -33,7 +33,7 @@ function bottomNotification(from, target = "", queued=false){
         "display": "block"
     });
 
-    if(["connected", "fetched", "reconected"].includes(from)){
+    if(["connected", "fetched", "reconnected"].includes(from)){
         $('.bottomNotification_Icon').css('filter', greenFilter);
         $(".bottomNotification_msg").css('color', greenText);
         $('.bottomNotification').css("backgroundColor", greenBG);
@@ -43,7 +43,7 @@ function bottomNotification(from, target = "", queued=false){
 
         if(from == "connected"){
             $(".bottomNotification_msg").text("User successfully connected");
-        }else if(from == "reconected"){
+        }else if(from == "reconnected"){
             $(".bottomNotification_msg").text("Successfully reconnected");
         }else if(from == "fetched"){
             $(".bottomNotification_msg").text("Data successfully fetched");

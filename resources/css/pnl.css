@@ -792,7 +792,7 @@ body{
     height: 65vh;
     gap: 15px;
 
-    padding: 17px 17px 30px 17px;
+    padding: 17px 17px 45px 17px;
 }
 
 .tradeHistory_thirdLine{
@@ -962,7 +962,7 @@ body{
     left: 50%;
     transform: translateX(-50%);
 
-    width: 100%;
+    width: 90%;
 
     font-size: 12px;
     color: var(--gray);
@@ -973,7 +973,7 @@ body{
     font-size: inherit;
 }
 
-.tradeHistory_nbTrades, .tradeHistory_pnl{
+.tradeHistory_nbTrades, .tradeHistory_pnl, .tradeHistory_tradeDate{
     color: inherit;
     font-size: inherit;
 }

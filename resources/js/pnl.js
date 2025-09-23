@@ -5,6 +5,11 @@ jQuery.fn.getStyleValue = function (prop) {
   return parseFloat($(this).css(prop).replace("px", ""));
 };
 
+// getLast item of array
+Array.prototype.last = function (n = 1) {
+  return this[this.length - n];
+};
+
 // ------------------------------------------------------
 // CONFIG & GLOBALS
 // ------------------------------------------------------
@@ -166,6 +171,11 @@ function params_read() {
   $(".parameter_percentage").css(
     "backgroundColor",
     params.isPercentage ? "var(--yellow)" : "var(--light-color)"
+  );
+
+  $(".parameter_percentage").css(
+    "color",
+    params.isPercentage ? "black" : "white"
   );
 
   return params;
@@ -974,12 +984,13 @@ function updateGlobalElements(walletData, initialDeposit, availableBank) {
   /* ── 5) Inject values & colours into the DOM ─────────────── */
   // Important: forcer le retour au BLANC ici pour corriger l’état “resté rouge”
   $(".bank_data").html(bankHTML).css("color", "white");
-
   $(".available_data").html(avail.html).css("color", avail.color);
-
-  $(".all_pnl_data").html(allPnl.html).css("color", allPnl.color);
-
   $(".ongoingPnl_data").html(ongoing.html).css("color", ongoing.color);
+  
+  if (initialDeposit === "ERROR" || initialDeposit !== 0) {
+    $(".all_pnl_data").html(allPnl.html).css("color", allPnl.color);
+    $(".all_pnl_data").removeClass("skeleton")
+  }
 }
 
 function getCoin(coins, name) {
@@ -1193,14 +1204,17 @@ function fetchStyleUpdate(fetching, refresh = false) {
       opacity: ".3",
       pointerEvents: "none",
     });
+
     $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "none");
   } else {
     $(".detail_elem_wrapper, .detail_select_wrapper").css("pointer-events", "all");
+
     $(".refresh_container").css({
       opacity: "1",
       pointerEvents: "all",
     });
-    $(".skeleton").removeClass("skeleton");
+    
+    $(".skeleton").not(".all_pnl_data").removeClass("skeleton");
   }
 }
 
@@ -1897,7 +1911,15 @@ function loadTradeData(trades, limit = 50) {
 
   $('.tradeHistory_nbTrades').text(rowsFull.length);
 
+  if (rowsFull.length > 0) {
+    const lastTradeDate = new Date(rowsFull.last(2).time);
+    $('.tradeHistory_tradeDate').text(lastTradeDate.toLocaleDateString());
+  } else {
+    $('.tradeHistory_lastTradeDate').text('N/A');
+  }
+
   $(".tradeHistory_thirdLine").children().remove();
+  
   for (const data of rows) {
     generateNpushTradeTile(data);
   }
@@ -2001,13 +2023,13 @@ function loadSimulatorData(mode) {
     $(".simulator_buyQuant").text(
       fixNumber(parseFloat(coin.buy_value) * parseFloat(stableCoin.conversionRate), 
         { digits: 2, dynamicDecimals: { limit: 10, extra: 2 } }
-      )+ " " + + short
+      ) + " " + short
     );
   } else if (mode == "sell") {
     $(".simulator_buyQuant").text(
       fixNumber(coin.buy_value, 
         { digits: 2, dynamicDecimals: { limit: 10, extra: 2 } }
-      ) + "$"
+      ) + " " + short
     );
   }
 
@@ -2248,16 +2270,16 @@ function hasPair(base, quote) {
   return !!(EXCHANGE_INFO && EXCHANGE_INFO.symbolSet.has(`${base}${quote}`));
 }
 
-async function initRealTime(apiKey, apiSecret, onPrice) {
+async function initRealTime(apiKey, apiSecret, onPrice, mode = "connect") {
   OPEN_ORDERS = {}; 
 
   const recvWindow = 60000;
 
   // 0) Prime conversions (inchangé)
-  await primeStableConversions();
-
-  // 0bis) Charger les paires valides une fois
-  await loadExchangeInfo(); // <<< NOUVEAU
+  await Promise.all([
+    primeStableConversions(),
+    loadExchangeInfo()
+  ]);
 
   // 1) Snapshot compte
   const ts = await binanceTs();
@@ -2266,12 +2288,26 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
   qs0 += `&signature=${sig0}`;
   const snapshot = await proxySigned(apiKey, "/api/v3/account", qs0);
 
+  if(mode == "connect"){
+    bottomNotification("connected"); // CONNECTED
+  }else if(mode == "reconnect"){
+    bottomNotification("reconnected"); // RECONNECTED
+  }
+
   // 2) Init positions
   positions = positions || {};
   Object.keys(positions).forEach(k => delete positions[k]);
   snapshot.balances.forEach((b) => {
     const qty = parseFloat(b.free) + parseFloat(b.locked);
     if (qty > 0) positions[b.asset] = { qty, cost: 0 };
+  });
+
+  // 5) Flux temps réel (voir patch connectPriceWS ci-dessous)
+  connectPriceWS(Object.keys(positions), onPrice);
+  connectUserWS(apiKey, {
+    onBalances: handleAccountPosition,
+    onOrderUpdate: handleOrderUpdate,
+    onBalanceUpdate: handleBalanceUpdate,
   });
 
   // 3) Backfill coût moyen + bootstrap trades
@@ -2313,14 +2349,6 @@ async function initRealTime(apiKey, apiSecret, onPrice) {
 
   // 4) Premier rendu
   recomputePortfolio();
-
-  // 5) Flux temps réel (voir patch connectPriceWS ci-dessous)
-  connectPriceWS(Object.keys(positions), onPrice);
-  connectUserWS(apiKey, {
-    onBalances: handleAccountPosition,
-    onOrderUpdate: handleOrderUpdate,
-    onBalanceUpdate: handleBalanceUpdate,
-  });
 }
 
 // ------------------------------------------------------
@@ -2424,47 +2452,35 @@ function removeDummy() {
     .remove();
 }
 
-function clearMinify(coins) {
-  const coinAssets = new Set(coins.map((coin) => coin.asset));
-
-  for (const key of Object.keys(params.minified)) {
-    if (!coinAssets.has(key)) {
-      delete params.minified[key];
-    }
-  }
-}
-
 function recomputePortfolio() {
   let coins = [],
       bank = 0,
       pnlSum = 0;
 
-  // 1) Construire le snapshot (en USDC)
+  // ── 1) Construire le snapshot portefeuille (USDC) ──────────────
   Object.entries(positions).forEach(([asset, pos]) => {
-    if (asset.endsWith("USDC") && asset !== "USDC") return; // safety
+    if (asset.endsWith("USDC") && asset !== "USDC") return; // sécurité
     if (pos.qty * pos.cost <= 2 && !stableCoins.hasOwnProperty(asset)) {
       bank += pos.qty * pos.cost;
       return;
-    };
+    }
 
     if (stableCoins.hasOwnProperty(asset)) {
-      const conversionRate =
-        stableCoins[asset].conversionRate || coinPrices[asset + "USDC"] || 0;
-
-      const curVal = pos.qty * conversionRate;
+      const rate = stableCoins[asset].conversionRate || coinPrices[asset + "USDC"] || 0;
+      const curVal = pos.qty * rate;
 
       coins.push({
         asset,
         amount: pos.qty,
-        price: conversionRate,
+        price: rate,
         actual_value: curVal,
         buy_value: curVal,
-        mean_buy: conversionRate,
+        mean_buy: rate,
         ongoing_pnl: "+0",
         quoteCurrency: "USDC",
       });
-
       bank += curVal;
+
     } else {
       const price = coinPrices[asset + "USDC"] || 0;
       const buyVal = pos.qty * pos.cost;
@@ -2487,84 +2503,65 @@ function recomputePortfolio() {
     }
   });
 
-  const nextWallet = {
-    coins,
-    global: { bank, pnl: pnlSum },
-  };
+  walletData = { coins, global: { bank, pnl: pnlSum } };
 
-  walletData = nextWallet;
+  // ── 2) Vérifier que toutes les positions ont un prix valide ────
+  const allPriced = walletData.coins.every(c =>
+    stableCoins[c.asset]
+      ? Number.isFinite(stableCoins[c.asset].conversionRate || coinPrices[c.asset + "USDC"])
+      : Number.isFinite(c.price) && c.price > 0
+  );
 
-  // 2) NE RENDRE QUE SI tout est "pricé"
-  const allValidNow = (walletData.coins || []).every((c) => {
-    if (stableCoins.hasOwnProperty(c.asset)) {
-      const r =
-        stableCoins[c.asset].conversionRate ||
-        coinPrices[c.asset + "USDC"] ||
-        0;
-      return Number.isFinite(r) && r > 0;
-    }
-    return Number.isFinite(c.price) && c.price > 0;
-  });
+  if (!allPriced) return; // pas encore affichable
 
-  if (allValidNow) {
-    try { old_save(walletData) } catch {}
+  try { old_save(walletData) } catch {}
 
-    if (firstLog) {
-      clearMinify(walletData.coins);
-      params_save(params);
-      firstLog = false;
+  // ── 3) Premier affichage (uniquement si firstLog) ──────────────
+  if (firstLog) {
+    firstLog = false;
+    fullyLoaded = true; 
 
-      (async () => {
-        try {
-          // 🔹 uniquement le dépôt fiat
-          const fiatDeposit = await getFiatDeposit(API.API, API.SECRET);
-          initialDeposit = fiatDeposit;
-        } catch (err) {
-          console.error("Initial funding check failed:", err);
-          initialDeposit = "ERROR";
-        } finally {
-          fullyLoaded = true;
-          displayNewData(walletData);
-          isApop(walletData, oldWalletData);
-          removeDummy();
-          fetchStyleUpdate(false);
-          fullyLoaded = true;
-        }
-      })();
-      return;
-    }
+    displayNewData(walletData);
+    isApop(walletData, oldWalletData);
+    fetchStyleUpdate(false);
+    removeDummy();
 
-    // 3) Rendus suivants
-    if (fullyLoaded) {
-      displayNewData(walletData);
-
-      // Détection pump/crash
-      const now = Date.now();
-      pumpCrashHistory.push({ time: now, pnl: pnlSum });
-      pumpCrashHistory = pumpCrashHistory.filter(
-        p => now - p.time <= PUMP_CRASH_CONFIG.timeWindow
-      );
-
-      if (pumpCrashHistory.length > 1) {
-        const first = pumpCrashHistory[0].pnl;
-        const last  = pumpCrashHistory[pumpCrashHistory.length - 1].pnl;
-        checkPumpCrash(first, last, coins);
+    // Chargement asynchrone du dépôt fiat pour MAJ All-Time PnL
+    (async () => {
+      try {
+        const fiatDeposit = await getFiatDeposit(API.API, API.SECRET);
+        initialDeposit = fiatDeposit;
+      } catch (err) {
+        console.error("Initial funding check failed:", err);
+        initialDeposit = "ERROR";
+      } finally {
+        updateGlobalElements(walletData, initialDeposit, availableFunds);
       }
+    })();
+  } else {
+    // ── 4) Rendus suivants (updates temps réel) ──────────────────
+    displayNewData(walletData);
+
+    // Pump/Crash detection
+    const now = Date.now();
+    pumpCrashHistory.push({ time: now, pnl: pnlSum });
+    pumpCrashHistory = pumpCrashHistory.filter(p => now - p.time <= PUMP_CRASH_CONFIG.timeWindow);
+    if (pumpCrashHistory.length > 1) {
+      const first = pumpCrashHistory[0].pnl;
+      const last  = pumpCrashHistory[pumpCrashHistory.length - 1].pnl;
+      checkPumpCrash(first, last, coins);
     }
   }
 
-  // 4) MAJ des availableFunds à chaque recompute (live via WS)
+  // ── 5) MAJ des fonds disponibles (toujours en arrière-plan) ────
   (async () => {
     try {
       const reservedFunds = await getReservedFundsUSDC();
       const totalStableUSDC = Object.keys(stableCoins).reduce((sum, s) => {
         const qty = positions[s]?.qty || 0;
-        const rate =
-          stableCoins[s].conversionRate ||
-          (s === "USDC" ? 1 : coinPrices[s + "USDC"] || 0);
+        const rate = stableCoins[s].conversionRate || (s === "USDC" ? 1 : coinPrices[s + "USDC"] || 0);
         return sum + qty * (Number.isFinite(rate) ? rate : 0);
       }, 0);
-  
       availableFunds = totalStableUSDC - reservedFunds;
     } catch (err) {
       console.error("Reserved funds calc failed:", err);
@@ -2579,25 +2576,39 @@ function recomputePortfolio() {
 
 async function getDataAndDisplay(refresh = false) {
   if (!isLogged) return;
+
   if (refresh) {
     displayNewData(walletData);
     return;
   }
 
+  // Active le skeleton
   fetchStyleUpdate(true, false);
 
   try {
-    await initRealTime(API.API, API.SECRET, (asset, price) => {
-      coinPrices[asset] = price;
-      recomputePortfolio();
-    });
+    const withTimeout = (promise, ms) =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout")), ms)
+        ),
+      ]);
 
-    bottomNotification("connected");
+    await withTimeout(
+      initRealTime(API.API, API.SECRET, (asset, price) => {
+        coinPrices[asset] = price;
+        recomputePortfolio();
+      }, "connect"),
+      7000
+    );
+
   } catch (e) {
     console.error("Proxy/Init error:", e);
+    bottomNotification("timeout");
     clearData("error");
   }
 }
+
 
 function resetState() {
   firstLog = true;
@@ -2614,7 +2625,7 @@ function resetState() {
 async function pnl() {
   $(".simulator").append(
     $(
-      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v5.9</span>'
+      '<span class="versionNB noselect" style="position: absolute; top: 13px; right: 10px; font-size: 14px; opacity: .5; color: white;">v6.0</span>'
     )
   );
 
@@ -2691,11 +2702,9 @@ async function pnl() {
         await initRealTime(API.API, API.SECRET, (asset, price) => {
           coinPrices[asset] = price;
           recomputePortfolio();
-        });
+        }, "reconnect");
 
-        // <<< IMPORTANT : remettre l'état OK visuellement
         $(".detail_connect").css("display", "none").text("CONNECT TO API");
-        bottomNotification("reconected");
       } catch (e) {
         // Erreurs réelles seulement (réseau, 5xx, auth). Les symboles invalides sont filtrés en amont.
         console.error("Re-init on visibility failed:", e);
@@ -2842,8 +2851,10 @@ async function pnl() {
       newVal = "-" + val.slice(1)
     } else if (val.startsWith("-")) {
       newVal = val.slice(1)
-    } else {
+    } else if(val.length > 0 && val != "0") {
       newVal = "-" + val
+    }else{
+      newVal = val;
     }
 
     $("#aimedProfit").val(newVal);
@@ -3007,8 +3018,10 @@ async function pnl() {
     if(!fullyLoaded) return;
     if (params.isPercentage) {
       $(this).css("backgroundColor", "var(--light-color)");
+      $(this).css("color", "white");
     } else {
       $(this).css("backgroundColor", "var(--yellow)");
+      $(this).css("color", "black");
     }
 
     params.isPercentage = !params.isPercentage;
