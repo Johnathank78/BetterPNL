@@ -104,12 +104,12 @@
         </div>
 
         <img src="./resources/imgs/pnl_logo.png" alt="" class="logo">
-        <div class="profile_connect"><img src="resources/imgs/profile.png" alt="" class="proifleIcon"></div>
+        <div class="profile_connect"><img src="./resources/imgs/profile.png" alt="" class="proifleIcon"></div>
 
         <div class="blurBG">
             <div class="blurItem_wrapper connect_wrapper">
                 <span class="connect_mainText noselect">CONNECT TO API</span>
-                <span class="parameter_percentage">GROWTH</span>
+                <div class="parameters_accessContainer"><img src="./resources/imgs/parameters.svg" class="parameters_img"></div>
                 
                 <form class="connectBody_wrapper" method="post" action="#">
                     <div class="blurItem_element_col key">
@@ -127,6 +127,29 @@
                         <div class="connect_disconnect"><img src="./resources/imgs/bin.svg" alt=""></div>
                     </div>
                 </form>
+
+            </div>
+
+            <div class="blurItem_wrapper parameters_wrapper">
+                <span class="connect_mainText noselect">PARAMETERS</span>
+                
+                <div class="parametersBody_wrapper">
+                    <div class="blurItem_paramItem_col key">
+                        <span class="blurItem_element_text noselect">MODE</span>
+                        <select name="detail_select" class="detail_select" id="displayMode">
+                            <option value="GROWTH">GROWTH</option>
+                            <option value="FLAT" selected>FLAT</option>
+                        </select>
+                    </div>
+
+                    <div class="blurItem_paramItem_col key">
+                        <span class="blurItem_element_text noselect">TRIGGER</span>
+                        <div class="growthTrigger_inpContainer">
+                            <input type="text" inputmode="decimal" autocomplete="off" class="strictlyFloatable blurItem_element_input growthTrigger_inp" placeholder="1.75" id="growthTrigger">
+                            <span class="percentagePlaceholder">%</span>
+                        </div>
+                    </div>
+                </div>
 
             </div>
 

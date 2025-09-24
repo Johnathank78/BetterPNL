@@ -86,8 +86,13 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 🚫 Ne jamais mettre en cache les appels API / proxy
-  if (url.pathname.startsWith("/proxy") || url.pathname.startsWith("/listenKey")) {
+  if (
+    url.pathname.startsWith("/proxy") ||
+    url.pathname.startsWith("/listenKey") ||
+    url.pathname.includes("proxySigned") ||
+    url.pathname.includes("proxyFiat") ||
+    url.pathname.includes("proxyPublic")
+  ) {
     event.respondWith(fetch(event.request));
     return;
   }

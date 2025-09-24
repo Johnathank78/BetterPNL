@@ -305,6 +305,38 @@ body{
     gap: 18px;
 }
 
+.parameters_wrapper{
+    gap: 25px;
+}
+
+.parametersBody_wrapper{
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    width: 100%;
+}
+
+.blurItem_paramItem_col{
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    height: 25px;
+    padding: 0 5px 15px 5px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(76, 83, 104, .3);
+}
+
+.blurItem_paramItem_col:last-child{
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
 .blurItem_element_col{
     position: relative;
 
@@ -314,6 +346,26 @@ body{
 
     width: 100%;
     gap: 10px;
+}
+
+#growthTrigger{
+    width: 50px;
+    padding-right: 18px;
+}
+
+.percentagePlaceholder{
+    position: absolute;
+    font-size: 15px;
+
+    top: 50%;
+    transform: translateY(-50%);
+
+    right: 7px;
+
+    color: var(--gray);
+    font-weight: 800;
+
+    pointer-events: none;
 }
 
 .blurItem_element_row{
@@ -500,14 +552,9 @@ body{
 }
 
 .parameter_percentage{
-    position: absolute;
-
     display: flex;
     justify-content: center;
     align-items: center;
-
-    top: 10px;
-    right: 10px;
 
     font-size: 12px;
     background-color: var(--light-color);
@@ -788,6 +835,32 @@ body{
     margin-top: auto;
 }
 
+.parameters_accessContainer{
+    position: absolute;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    top: 12px;
+    right: 17px;
+    width: 33px;
+    height: 33px;
+
+    background-color: var(--superLight-color);
+    border-radius: 8px;
+}
+
+.parameters_accessContainer:active{
+    filter: brightness(1.2);
+}
+
+.parameters_img{
+    width: 18px;
+    height: 18px;
+}
+
+
 .tradeHistory_wrapper{
     height: 65vh;
     gap: 15px;
@@ -823,6 +896,11 @@ body{
 
 .simulator_mainText, .connect_mainText{
     font-weight: 600;
+}
+
+.simulator_meanBuy,
+.simulator_buyQuant {
+  white-space: nowrap;
 }
 
 .tradeHistory_item{

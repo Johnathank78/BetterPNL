@@ -53,6 +53,7 @@ var isLogged = false,
 var initialDeposit = 0,
   availableFunds = 0;
 var userWsKeepAliveId = null;
+const MIN_VALUE_USDC = 2;
 
 var positions = {};
 var OPEN_ORDERS = {}; // key = orderId, value = ordre complet
@@ -168,15 +169,11 @@ function params_read() {
         : 0
     );
 
-  $(".parameter_percentage").css(
-    "backgroundColor",
-    params.isPercentage ? "var(--yellow)" : "var(--light-color)"
-  );
+  PUMP_CRASH_CONFIG.growthTrigger = params.growthTrigger || 1.75;
+  $('#growthTrigger').val(PUMP_CRASH_CONFIG.growthTrigger);
 
-  $(".parameter_percentage").css(
-    "color",
-    params.isPercentage ? "black" : "white"
-  );
+  $('#displayMode').val(params.isPercentage ? "GROWTH" : "FLAT");
+
 
   return params;
 }
@@ -826,32 +823,35 @@ function computeAveragePrice(trades) {
   const rate = getQuoteToUSDC(quote) ?? 1; // conversion quote→USDC (courant)
 
   const QTY_EPS = 1e-12; // quantité négligeable
-  const DUST_USDC = 1; // “quasi-zéro” en valeur USDC
+  const DUST_USDC = 1;   // “quasi-zéro” en valeur USDC
 
   let positionQty = 0;
   let positionCostUSDC = 0;
 
   for (const t of trades) {
-    const qty = parseFloat(t.qty);
+    const qty   = parseFloat(t.qty);
     const price = parseFloat(t.price);
     if (!isFinite(qty) || !isFinite(price)) continue;
 
     if (t.isBuyer) {
-      const avg = positionQty ? positionCostUSDC / positionQty : 0;
-      if (positionQty <= QTY_EPS || positionQty * avg <= DUST_USDC) {
+      // reset si portefeuille quasi vide → nouvelle base
+      if (positionQty <= QTY_EPS || positionQty * (positionCostUSDC/Math.max(positionQty,1)) <= DUST_USDC) {
         positionQty = 0;
         positionCostUSDC = 0;
       }
-      positionQty += qty;
-      positionCostUSDC += qty * price * rate; // en USDC
+
+      positionQty      += qty;
+      positionCostUSDC += qty * price * rate;
+
     } else {
       const avg = positionQty ? positionCostUSDC / positionQty : 0;
       const sellQty = Math.min(qty, positionQty);
-      positionQty -= sellQty;
+
+      positionQty      -= sellQty;
       positionCostUSDC -= sellQty * avg;
 
-      const newAvg = positionQty ? positionCostUSDC / positionQty : 0;
-      if (positionQty <= QTY_EPS || positionQty * newAvg <= DUST_USDC) {
+      // 🔑 RESET complet si position liquidée
+      if (positionQty <= QTY_EPS) {
         positionQty = 0;
         positionCostUSDC = 0;
       }
@@ -860,6 +860,7 @@ function computeAveragePrice(trades) {
 
   return positionQty > QTY_EPS ? positionCostUSDC / positionQty : null;
 }
+
 
 function filterHoldings(walletData, coinPrices, balances) {
   return balances.filter((b) => {
@@ -2318,7 +2319,7 @@ async function initRealTime(apiKey, apiSecret, onPrice, mode = "connect") {
       let costSet = false;
 
       // Filtrer les quotes aux seules paires existantes
-      const validQuotes = Object.keys(stableCoins).filter(q => hasPair(asset, q)); // <<< NOUVEAU
+      const validQuotes = Object.keys(stableCoins).filter(q => hasPair(asset, q));
 
       for (const quote of validQuotes) {
         const sym = asset + quote;
@@ -2460,7 +2461,7 @@ function recomputePortfolio() {
   // ── 1) Construire le snapshot portefeuille (USDC) ──────────────
   Object.entries(positions).forEach(([asset, pos]) => {
     if (asset.endsWith("USDC") && asset !== "USDC") return; // sécurité
-    if (pos.qty * pos.cost <= 2 && !stableCoins.hasOwnProperty(asset)) {
+    if (pos.qty * pos.cost <= MIN_VALUE_USDC && !stableCoins.hasOwnProperty(asset)) {
       bank += pos.qty * pos.cost;
       return;
     }
@@ -2586,25 +2587,13 @@ async function getDataAndDisplay(refresh = false) {
   fetchStyleUpdate(true, false);
 
   try {
-    const withTimeout = (promise, ms) =>
-      Promise.race([
-        promise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), ms)
-        ),
-      ]);
-
-    await withTimeout(
-      initRealTime(API.API, API.SECRET, (asset, price) => {
-        coinPrices[asset] = price;
-        recomputePortfolio();
-      }, "connect"),
-      7000
-    );
-
+    initRealTime(API.API, API.SECRET, (asset, price) => {
+      coinPrices[asset] = price;
+      recomputePortfolio();
+    }, "connect");
   } catch (e) {
     console.error("Proxy/Init error:", e);
-    bottomNotification("timeout");
+    bottomNotification("fetchError");
     clearData("error");
   }
 }
@@ -2690,8 +2679,13 @@ async function pnl() {
 
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState === "hidden" && isLogged) {
-      if (priceWs) priceWs.close();
-      if (userWs) userWs.close();
+      if (priceWs) { try { priceWs.close(); } catch(_) {} priceWs = null; }
+      if (userWs)  { try { userWs.close();  } catch(_) {} userWs  = null; }
+
+      if (userWsKeepAliveId) {
+        clearInterval(userWsKeepAliveId);
+        userWsKeepAliveId = null;
+      }
     } else if (document.visibilityState === "visible" && isLogged) {
       try {
         if (initialDeposit == "ERROR" || availableFunds == "ERROR") {
@@ -3014,19 +3008,33 @@ async function pnl() {
 
   $("img").attr("draggable", false);
 
-  $(".parameter_percentage").on("click", function () {
-    if(!fullyLoaded) return;
-    if (params.isPercentage) {
-      $(this).css("backgroundColor", "var(--light-color)");
-      $(this).css("color", "white");
-    } else {
-      $(this).css("backgroundColor", "var(--yellow)");
-      $(this).css("color", "black");
-    }
+  $('#displayMode').on('change', function(){
+    let mode = $(this).val();
+    params.isPercentage = (mode === "GROWTH") ? true : false;
 
-    params.isPercentage = !params.isPercentage;
     updateGlobalElements(walletData, initialDeposit, availableFunds);
     params_save(params);
+  }); 
+  
+  $('#growthTrigger').on('input', function(){
+    // maxchar = 4 (including dot)
+    let val = $(this).val().slice(0,4);
+    $(this).val(val);
+  });
+
+  $('#growthTrigger').on('focusout', function(){
+    let val = $(this).val();
+
+    if(val == "") val = "1.75";
+    $(this).val(val);
+
+    params.growthTrigger = parseFloat(val) || 1.75;
+    params_save(params);
+  });
+
+  $('.parameters_accessContainer').on('click', function() {
+    current_page = "parameters";
+    showBlurPage('parameters_wrapper');
   });
 
   $("#api_secret-val").on("input", function () {
